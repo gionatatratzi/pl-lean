@@ -195,7 +195,7 @@ __Exercise__: Define a function `orB` that implements the disjunction connective
 -/
 
 def orB (a b : Bool) : Bool :=
-  sorry
+  a || b
 
 
 /-
@@ -278,10 +278,11 @@ def mystery : Bool → Bool :=
   For the moment, leave the `sorry` in `mystery_resolved`.
 -/
 
-def mystery₂ : Bool → Bool := sorry
+def mystery₂ : Bool → Bool :=
+  fun b : Bool => andB true b
 
-theorem mystery_resolved (b: Bool): mystery b = mystery₂ b := by sorry
-
+theorem mystery_resolved (b: Bool): mystery b = mystery₂ b :=
+  by rfl
 
 /-
 
@@ -374,7 +375,7 @@ __Exercise__: the *exclusive or* is true when exactly one input is true.
 Define the connective, and give its truth table through examples.
 -/
 
-def xorB (a b : Bool) : Bool := sorry
+def xorB (a b : Bool) : Bool := a != b
 
 
 
@@ -383,7 +384,7 @@ __Exercise__: the *nand* connective is true when not both inputs are true.
 Define the connective, and give its truth table through examples.
 -/
 
-def nandB (a b : Bool) : Bool := sorry
+def nandB (a b : Bool) : Bool := !(a && b)
 
 end Boolean_operators
 
@@ -430,22 +431,22 @@ __Exercise__: Redefine the negation using conditional expressions.
 -/
 
 def negIf (b : Bool) : Bool :=
-  sorry
+  if b then false else true
 
-example : negB true  = negIf true  := by sorry
-example : negB false = negIf false := by sorry
+example : negB true  = negIf true  := by rfl
+example : negB false = negIf false := by rfl
 
 /-
 __Exercise__: Redefine the implication connective using conditional expressions.
 -/
 
 def impIf (a b : Bool) : Bool :=
-  sorry
+  if a then b else true
 
-example : (impIf false false) = true  := by sorry
-example : (impIf false true)  = true  := by sorry
-example : (impIf true  false) = false := by sorry
-example : (impIf true  true)  = true  := by sorry
+example : (impIf false false) = true  := by rfl
+example : (impIf false true)  = true  := by rfl
+example : (impIf true  false) = false := by rfl
+example : (impIf true  true)  = true  := by rfl
 
 
 /-
@@ -453,12 +454,12 @@ __Exercise__: Redefine the XOR connective using conditional expressions.
 -/
 
 def xorIf (a b : Bool) : Bool :=
-  sorry
+  if a then !b else b
 
-example : (xorIf false false) = false := by sorry
-example : (xorIf false true)  = true  := by sorry
-example : (xorIf true  false) = true  := by sorry
-example : (xorIf true  true)  = false := by sorry
+example : (xorIf false false) = false := by rfl
+example : (xorIf false true)  = true  := by rfl
+example : (xorIf true  false) = true  := by rfl
+example : (xorIf true  true)  = false := by rfl
 
 
 /-
