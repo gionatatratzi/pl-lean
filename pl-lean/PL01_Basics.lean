@@ -850,7 +850,14 @@ Prove the following theorem.
 
 theorem andB_eq_andMatch : ∀ a b : Bool,
   andB a b = andMatch a b := by
-  sorry
+  intro a b
+  cases a with
+  | false => cases b with
+    | false => rfl
+    | true => rfl
+  | true => cases b with
+    | false => rfl
+    | true => rfl
 
 
 /-
@@ -878,18 +885,27 @@ Finally, show that the two definitions are equivalent.
 -/
 
 def allThree (a b c : Bool) : Bool :=
-  sorry
+  a && b && c
 
 example : allThree true true true = true := by
-  sorry
+  rfl
 
 example : allThree true false true = false := by
-  sorry
+  rfl
 
 def allThreeMatch (a b c : Bool) : Bool :=
-  sorry
+  match a, b, c with
+  | true, true, true => true
+  | _, _, _ => false
 
-example (a b c : Bool) : allThree a b c = allThreeMatch a b c := by sorry
+example (a b c : Bool) : allThree a b c = allThreeMatch a b c := by
+  cases a with
+  | false => rfl
+  | true => cases b with
+    | false => rfl
+    | true => cases c with
+      | false => rfl
+      | true => rfl
 
 
 /-
@@ -902,8 +918,14 @@ It is the Boolean form of one of De Morgan's laws.
 -/
 
 theorem deMorgan_nand (a b : Bool) :
-    !(a && b) = ((!a) || (!b)) :=
-  sorry
+    !(a && b) = ((!a) || (!b)) := by
+  cases a with
+  | false => cases b with
+    | false => rfl
+    | true => rfl
+  | true => cases b with
+    | false => rfl
+    | true => rfl
 
 
 /-
@@ -931,14 +953,18 @@ In the implementation of `mux4`, try to reuse `mux2`.
 
 -/
 
-def mux2 (s0 a b : Bool) : Bool := sorry
+def mux2 (s0 a b : Bool) : Bool := if s0 then a else b
 
-def mux4 (s0 s1 a0 a1 a2 a3 : Bool) : Bool := sorry
+def mux4 (s0 s1 a0 a1 a2 a3 : Bool) : Bool :=
+  if s1 then mux2 s0 a2 a3 else mux2 s0 a0 a1
 
-example : mux4 false false false true false true = false := sorry
-example : mux4 false true false true false true = true   := sorry
-example : mux4 true false false true false true = false  := sorry
-example : mux4 true true false true false true = true    := sorry
+example : mux4 false false false true false true = true := by rfl
+example : mux4 false false true false true false = false  := by rfl
+example : mux4 false false true true false true = true  := by rfl
+example : mux4 false false true false true false = false  := by rfl
+example : mux4 false true false true false true = true   := by rfl
+example : mux4 true false false true false true = false  := by rfl
+example : mux4 true true false true false true = false    := by rfl
 
 
 end Exercises
