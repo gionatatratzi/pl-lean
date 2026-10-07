@@ -22,7 +22,7 @@ and *proofs by induction* fit together.
 We will learn how to:
 * inspect the inductive type `Nat` and its two constructors;
 * define functions on `Nat` by pattern matching;
-* define recursive functions, and understand structural recursion;
+* define recursive functions;
 * write arithmetic functions: addition, multiplication, powers, factorial,
   comparison, and subtraction;
 * prove simple properties of our programs, exploring new tactics.
@@ -842,25 +842,55 @@ After `intros n m h`, Lean shows (it may print `n.succ` for `Nat.succ n`):
     ⊢ n = m
 
 Until now we used `cases` on natural numbers.  Here we use it on the
-hypothesis `h`, which is a *proof*.  This works because equality is itself an
-inductive type, and it has a single constructor: `rfl`, which builds a proof
-of `a = a`.  So a proof of `Nat.succ n = Nat.succ m` can only have been built
-by `rfl`.  The tactic `cases h` asks: "how could `h` have been built?" There
-is only one way, so Lean learns that the two sides must be the same number.
-Lean then compares them:
+hypothesis `h`, which is itself a *proof*.
 
-* both sides start with the constructor `succ`;
-* different constructors never build the same number, and equal values built
-  by the same constructor must have equal arguments;
-* therefore `n` and `m` must be the same number.
+Equality is an inductive type with one constructor:
 
-Lean records this by replacing one of the two variables by the other, so the
-goal becomes `n = n` (or `m = m`).  This is exactly what `rfl` proves.
+    Eq.refl a : a = a
 
-Compare with `cases n`, which produced *two* goals, one for each constructor.
-Here `cases h` produces *one* goal.  If the equation were impossible, such as
-`Nat.succ n = 0`, there would be no way to build `h`, so `cases h` would close the
-goal immediately:
+(Actually, the term `rfl` is a shorthand for this constructor. In tactic mode, the
+`rfl` tactic closes an equality goal by constructing such a proof.)
+
+Thus, when we write `cases h` in our proof, Lean considers the only possible constructor
+case for an equality proof: the case where `h` is a reflexivity proof.
+
+Let us see what this means in our example. A reflexivity proof for `Nat.succ n` has type:
+
+    Eq.refl (Nat.succ n) : Nat.succ n = Nat.succ n
+
+But the type of `h` is:
+
+    Nat.succ n = Nat.succ m
+
+To make these two types agree, Lean must match:
+
+    Nat.succ n    with    Nat.succ m
+
+Both expressions are built using the same constructor, `Nat.succ`, so their
+arguments must match. Lean therefore *unifies* `m` with `n`.
+
+Indeed, the context and goal then become:
+
+    n : Nat
+    h : Nat.succ n = Nat.succ n         (this may be removed from the Infoview)
+    ⊢ n = n
+
+The final goal is a reflexive equality, so `rfl` proves it.
+
+This does not mean that every equality proof must literally be written using
+`rfl`: equality proofs may be obtained from hypotheses or other theorems.
+Rather, it means that `Eq.refl` is the only constructor case that must be
+considered when eliminating an equality proof.
+-/
+
+/-
+Note that if `h` states an impossible equality, such as
+
+    h : Nat.succ n = 0
+
+the reflexive constructor case would be impossible: `Nat.succ` and `Nat.zero`
+are different constructors. Consequently, `cases h` would close the goal
+without producing any new goals.
 -/
 
 theorem succ_ne_zero_example (n : Nat) : Nat.succ n = 0 → False := by
@@ -1097,111 +1127,8 @@ in the Infoview.  The `exact` version builds the whole proof at once.
 end Proofs_by_backward_reasoning
 
 
-section Induction
-
 /-
-## Induction: the proof counterpart of recursion
-
-Case analysis is not enough for `addN 0 n = n`: in the successor case we
-get the goal for `k + 1`, but to solve it we need to know the result for `k`.
-This is exactly what *mathematical induction* provides.
-
-Suppose we want to prove a property `P n` for every natural number `n`.
-The induction principle says that it is enough to prove:
-
-1. `P 0`                       -- the base case;
-2. `P n -> P (n + 1)`          -- the inductive case.
-
-The second part says that if the property is true for an arbitrary `n`, then
-it is true for its successor.
-
-In Lean, the `induction` tactic exposes exactly these cases.  In the inductive case,
-we also get the *induction hypothesis* `ih`: the statement for the smaller number.
-
--/
-
-#check addN_succ_right    -- this lemma will be used in the proof: check it
-
-theorem zero_addN (n : Nat) : addN 0 n = n := by
-  induction n with
-  | zero => rfl               -- base case
-  | succ n' ih =>             -- inductive case (note `ih` in the Infoview)
-      rw [addN_succ_right]    -- addN 0 (n' + 1) -> (addN 0 n') + 1)
-      rw [ih]
-
-/-
-Let us follow the proof.  After `induction n with`, Lean shows two goals:
-
-    case zero:   addN 0 0 = 0
-    case succ:   ih : addN 0 n' = n'
-                 ⊢ addN 0 (n' + 1) = n' + 1
-
-* The first goal follows by computation, so `rfl` works.
-* In the second goal, we use two rewritings:
-  1. `rw [addN_succ_right]` rewrites `addN 0 (n' + 1)` into `addN 0 n' + 1`.
-  2. Then `rw [ih]` replaces `addN 0 n'` by `n'`, and the goal becomes `n' + 1 = n' + 1`,
-     which `rw` closes by itself.
-
-This proof highlights an important correspondence:
-
-    PROGRAMMING                  PROVING
-    ------------------------------------------------
-    match n with ...             cases n with ...
-    recursive call on n'         induction hypothesis about n'
-    base case                    base case
-    recursive case               inductive case
-
-The proof has the same shape as the recursive function it talks about.
-
--/
-
-/-
-As another example, we consider a variant of `addN_succ_right` where the successor is in the
-first argument.  We still induct on `m`, since `addN` is recursive on its second argument.
--/
-
-theorem addN_succ_left (n m : Nat) : addN (n + 1) m = addN n m + 1 := by
-  induction m with
-  | zero => rfl
-  | succ m' ih =>
-    rw [addN_succ_right]      -- rewrite addN_succ in the LHS of the goal
-    rw [addN_succ_right]      -- rewrite addN_succ in the RHS of the goal
-    rw [ih]
-
-/-
-In the previous proof, we could have just written:
-  | succ m' ih => rw [addN_succ_right,addN_succ_right,ih]
-I split the rewritings in three steps so that you can check their effects in the Infoview.
-
-Tactic proofs of this shape are often written in a shorter way using `simp`,
-which repeatedly rewrites using the definitions and lemmas we give it.  For
-example, the inductive case above could be written
-
-    | succ m' ih => simp [addN, ih]
-
-We will use both styles.  The explicit `rw` version is better for understanding
-the proof, `simp` is faster to write.
--/
-
-/-
-We can now prove commutativity of our addition function.  This is a slightly
-larger proof, and it shows how earlier lemmas are reused.
--/
-
-theorem addN_comm (n m : Nat) : addN n m = addN m n := by
-  induction m with
-  | zero =>
-    rw [addN_zero]
-    rw [zero_addN]
-  | succ m' ih =>
-    rw [addN_succ_right]
-    rw [addN_succ_left]
-    rw [ih]
-
-/-
-The proof above is a useful milestone.  We have gone from a short recursive
-program to a mathematical property about the program, and Lean has checked the
-proof mechanically.
+## Summary
 
 We do not need to know every tactic in Lean to do this.  A small toolkit is
 already enough for many elementary proofs:
@@ -1214,13 +1141,7 @@ already enough for many elementary proofs:
 * `simp`      -- repeatedly simplify using definitions and known lemmas;
 * `have`      -- prove intermediate facts;
 * `cases`     -- split an inductive value into its constructors;
-* `induction` -- reason recursively about an inductive value.
-
 -/
-
-end Induction
-
-
 
 
 section Exercises
@@ -1230,14 +1151,10 @@ section Exercises
 -/
 
 /-
-### Exercise: Left identity of mulN
-
-Prove that 0 is the left identity of multiplication.
-Hint: by induction on `n`.  The inductive case needs `mulN_succ`, `addN_zero`, and
-the induction hypothesis `ih`.  You can use them with `rw [...]` or inside `simp [...]`.
+### Exercise: Equivalent definitions of successor
 -/
 
-theorem zero_mulN (n : Nat) : mulN 0 n = 0 := by
+theorem addN_one_right (n : Nat) : addN n 1 = Nat.succ n := by
   sorry
 
 
@@ -1252,56 +1169,132 @@ theorem addN_self_succ (n : Nat) : addN (n + 1) (n + 1) = addN n n + 1 + 1 := by
 
 
 /-
-### Exercise: Reflexivity of eqN
+### Exercise: Repeated rewriting
 
-Prove that `eqN` is reflexive. Hint: proceed by induction on `a`, and use the `exact` tactic.
+Use `addN_succ_right` twice.  Observe the goal in the Infoview after each
+application of `rw`.
 -/
 
-theorem eqN_refl (a : Nat) : eqN a a = true := by
+theorem addN_two_steps (n m : Nat) :
+    addN n (m + 1 + 1) = addN n m + 1 + 1 := by
   sorry
 
 
 /-
-### Exercise: Alternative characterization of even (n + 1)
+### Exercise: Rewriting a hypothesis
 
-Prove that `isEven (n+1)` is true if and only if `isEven n` is false.
-Hint: `simp` knows that ! is involutory
+Rewrite both occurrences of `addN` in `h`, using `addN_zero n` and
+`addN_zero m`.  Then close the goal with `exact`.
 -/
 
-theorem isEven_succ (n: Nat) : isEven (n+1) = !(isEven n) := by
+theorem addN_zero_cancel (n m : Nat)
+    (h : addN n 0 = addN m 0) : n = m := by
   sorry
 
 
 /-
-### Exercise: Doubled numbers are even
+### Exercise: Rewriting from right to left
 
-Hint: by induction on `n`.
+Use `hab` from right to left in the goal, and then use `exact`.
 -/
 
-theorem isEven_doubleN (n: Nat) : isEven (doubleN n) = true := by
+theorem eq_from_common_left (a b c : Nat)
+    (hab : a = b) (hac : a = c) : b = c := by
   sorry
 
 
 /-
-### Exercise: Double and addition
+### Exercise: Case analysis on a natural number
 
-Hint: by induction on `n`.
+Prove the result by considering the `zero` and `succ` cases for `n`.  Both
+resulting goals can be closed by computation.
 -/
 
-theorem doubleN_addN (n: Nat) : doubleN n = addN n n := by
+theorem leN_eq_eqN_zero (n : Nat) : leN n 0 = eqN n 0 := by
   sorry
 
 
 /-
-### Exercise: Associativity of addN
+### Exercise: Case analysis on an impossible equality
 
-Prove that `addN` is associative.
-
-Hint: induction on `k`.  In the successor case, unfold the additions with
-`addN_succ_right`, and finish with the induction hypothesis.
+Introduce the equality as a hypothesis and then perform case analysis on it.
 -/
 
-theorem addN_assoc (n m k : Nat) : addN (addN n m) k = addN n (addN m k) := by
+theorem zero_ne_succ (n : Nat) : 0 = Nat.succ n → False := by
   sorry
+
+
+/-
+### Exercise: Backward reasoning with two premises
+
+Use `apply eq_trans₂ a b c`.  This creates two goals: solve them using the
+hypotheses `hab` and `hbc`.
+-/
+
+theorem eq_trans_apply (a b c : Nat)
+    (hab : a = b) (hbc : b = c) : a = c := by
+  sorry
+
+
+/-
+### Exercise: Repeated backward reasoning
+
+Use `succN_injective` three times with `apply`, and finish with `exact h`.
+-/
+
+theorem succ_succ_succ_injective (a b : Nat) :
+    Nat.succ (Nat.succ (Nat.succ a)) =
+      Nat.succ (Nat.succ (Nat.succ b)) →
+    a = b := by
+  sorry
+
+
+/-
+### Exercise: Intermediate facts with `have`
+
+First use `have` and `succN_injective` to obtain proofs of `a = b` and
+`b = c`.  Then combine these intermediate facts to prove `a = c`.
+-/
+
+theorem eq_from_succ_chain (a b c : Nat)
+    (hab : Nat.succ a = Nat.succ b)
+    (hbc : Nat.succ b = Nat.succ c) : a = c := by
+  sorry
+
+
+/-
+### Exercise: Simplification using a hypothesis
+
+Use `simp [h]` to replace `eqN a b` with `false` and compute its Boolean
+negation.
+-/
+
+theorem not_eqN_of_false (a b : Nat) (h : eqN a b = false) :
+    !(eqN a b) = true := by
+  sorry
+
+/-
+### Exercise: Summing up equal numbers
+
+Solve this by way of rewriting the right theorems or assumptions.
+-/
+
+theorem plus_id : ∀ n m o : Nat, n = m → m = o → n + m = m + o := by sorry
+
+/-
+### Exercise: Multiplying by zero
+
+Solve this by way of rewriting the right theorems or assumptions.
+-/
+
+theorem mult_n_0_m_0 : ∀ n m : Nat, addN (mulN n 0) (mulN m 0) = 0 := by sorry
+
+/-
+### Exercise: One ain't double
+
+Hint: you can discharge a contradiction `h` with `cases h`.
+-/
+
+theorem one_not_double : ∀ n, 1 = mulN 2 n → False := by sorry
 
 end Exercises
