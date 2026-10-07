@@ -1,6 +1,6 @@
 /-
 
-# Natural numbers and recursive programming
+# Natural numbers, recursion, and higher-order functions
 
 This file is both a lecture and a Lean program.  Read the comments from top to
 bottom, but also place the cursor on each command and inspect Lean's Infoview.
@@ -22,10 +22,15 @@ and *proofs by induction* fit together.
 We will learn how to:
 * inspect the inductive type `Nat` and its two constructors;
 * define functions on `Nat` by pattern matching;
-* define recursive functions;
+* define recursive functions, and understand structural recursion;
 * write arithmetic functions: addition, multiplication, powers, factorial,
   comparison, and subtraction;
-* prove simple properties of our programs, exploring new tactics.
+* combine `if` expressions with Boolean-valued functions;
+* write higher-order functions: functions that take functions as arguments, or
+  that return functions as results;
+* use anonymous functions and partial application;
+* prove simple properties of our programs with `rfl`, `rw`, `simp`, `cases`,
+  and `induction`.
 
 -/
 
@@ -66,10 +71,26 @@ experiment while you work.
 
 -/
 
+/-
+__Exercise__: before continuing, write in a comment the type of `7`.
+What do you expect `#check 7` to report?  Then check your guess.
+-/
+
+-- Your answer:
+
+#check 7
+
+/-
+Numerals such as `7` could in principle denote many kinds of numbers (natural
+numbers, integers, floating-point numbers, ...).  When nothing else says
+otherwise, Lean chooses `Nat`.
+
+-/
+
 end Reading_this_file
 
 
-namespace MyNat
+section Natural_numbers
 
 /-
 ## Natural numbers
@@ -78,21 +99,9 @@ Natural numbers are the numbers
 
     0, 1, 2, 3, ...
 
-In Lean they form the *inductive type* `Nat`.
-Here we redefine `Nat` in a new namespace, in order to
-avoid conflicts with Lean's native type `Nat`.
--/
+In Lean they form the inductive type `Nat`.
 
-inductive Nat where
-  | zero : Nat          --- axiom: zero is a Nat
-  | succ : Nat -> Nat   --- inference rule: if n is a Nat, then succ n is a Nat
-
-#eval Nat.zero
-#eval Nat.succ Nat.zero
-#eval Nat.succ (Nat.succ Nat.zero)
-
-/-
-An inductive type is defined by listing its *constructors*: the only ways of
+An *inductive type* is defined by listing its *constructors*: the only ways of
 building a value of that type.  Conceptually, the constructors of `Nat` are:
 
 * `Nat.zero`, which constructs zero;
@@ -131,24 +140,17 @@ This structure will guide both our programs and our proofs.
 
 -/
 
-end MyNat
-
-
-/-
-We now switch back to Lean's native type `Nat`. So, from now on we can use
-pretty-printing and all the standard operators on `Nat` defined in the Lean library.
--/
-
-section Natural_numbers
-
 #check Nat            --- also types have types!
 #check Nat.zero
 #check Nat.succ
+#check (0 : Nat)
+#check (7 : Nat)
 
-#check (7 : Nat)      --- Lean implicitly converts 7 into a Nat
+#eval (0 : Nat)
+#eval (1 : Nat)
 #eval (7 : Nat)
 
-#print Nat            --- built-in Nat have the same structure of MyNat.Nat
+#print Nat
 
 /-
 For example, `Nat.succ 4` is the natural number 5.
@@ -157,8 +159,8 @@ For example, `Nat.succ 4` is the natural number 5.
 #eval Nat.succ 4
 
 /-
-The constructor `Nat.succ` is itself a function in Nat → Nat.
-Its type says that, given a natural number, it produces another natural number:
+The constructor `Nat.succ` is itself a function in Nat → Nat.  Its type says that, given a
+natural number, it produces another natural number:
 -/
 
 #check Nat.succ
@@ -179,35 +181,35 @@ one by taking its successor.
 -/
 
 /-
-### Some syntactic sugar
+### Two ways of writing the successor
 
 Writing `Nat.succ n` is precise but heavy.  Lean also lets us write `n + 1` for
-the successor of `n`.  The two expressions denote exactly the same number, and Lean
-prefers to *print* `n + 1`: you will see it in the Infoview.
+the successor of `n`.  The two expressions are the same number, and Lean
+prefers to *print* `n + 1`: you will see it often in the Infoview.
 
 The following facts hold by plain computation, so `rfl` proves them.
 -/
+
+example : Nat.succ 4 = 5 := by rfl
 
 example : 3 = Nat.succ (Nat.succ (Nat.succ Nat.zero)) := by rfl
 
 example (n : Nat) : Nat.succ n = n + 1 := by rfl
 
 /-
-__Exercise__: Note that `rfl` is not powerful enough to prove apparently
-obvious equivalences, like e.g. `n + 1 = 1 + n`. Replace `sorry` with
-`rfl` and check whether the goal is solved.
+Note however that `rfl` is not powerful enough to prove that `n + 1 = 1 + n`:
 -/
 example (n : Nat) : Nat.succ n = 1 + n := by sorry
 
 
 /-
-### Built-in arithmetic operators
+### Built-in arithmetic
 
 Lean already knows the usual operations on natural numbers.
 -/
 
 #eval 7 + 5
-#eval 6 * 7
+#eval 7 * 5
 #eval 17 / 5       -- integer division
 #eval 17 % 5       -- remainder
 #eval 2 ^ 10       -- power
@@ -222,7 +224,7 @@ subtraction stops at zero:
 #eval 5 - 7
 
 /-
-In this lecture we will deliberately re-implement addition, multiplication, and
+In this lecture we deliberately *re-implement* addition, multiplication, and
 so on from scratch (`addN`, `mulN`, ...).  The goal is to learn how recursive
 functions on inductive data work, and later to prove things about them.  In real
 programs you should of course use the built-in operations, which are much faster.
@@ -237,9 +239,12 @@ section Pattern_matching_on_Nat
 /-
 ## Pattern matching on natural numbers
 
-We define the predecessor function by pattern matching:
-* the predecessor of zero is zero,
-* the predecessor of a successor is the number inside the successor.
+We already used pattern matching with `Bool`.  The same idea works with `Nat`.
+A function on natural numbers can describe separately what happens for zero
+and for a successor.
+
+For example, the predecessor of zero is defined here to be zero, while the
+predecessor of a successor is the number inside the successor.
 
 -/
 
@@ -248,26 +253,28 @@ def predN (n : Nat) : Nat :=
   | Nat.zero   => Nat.zero
   | Nat.succ k => k
 
+#eval predN 0
+#eval predN 1
+#eval predN 7
+
 /-
 The pattern `Nat.succ k` does two things at once:
 
 1. it checks that the argument is a successor;
 2. it gives a name, `k`, to the number stored inside that successor.
 
+This is exactly the same idea as pattern matching on a Boolean, but with the difference
+that now the constructor carries data that we can use in the right-hand side.
+
 Lean also checks that the patterns cover *all* constructors.
 __Exercise__: Try commenting the `Nat.zero` case from `predN` and read the error message.
+
 -/
 
---- We can use `rfl` to prove simple facts by computation.
-example : predN 0 = 0 := by rfl
-example : predN 1 = 0 := by rfl
-example : predN 7 = 6 := by rfl
-
---- With `rfl` we can also prove more general facts: for example, that
---- the predecessor of the successor of n is always n
+--- The predecessor of the successor of n is always n
 theorem pred_succ (n: Nat) : predN (Nat.succ n) = n := by rfl
 
---- Most of the times, also the successor of the predecessor of `n` is `n`
+--- Most of the times, also the successor of the predecessor of a n is n
 example : Nat.succ (predN 3) = 3 := by rfl
 example : Nat.succ (predN 7) = 7 := by rfl
 
@@ -275,14 +282,27 @@ example : Nat.succ (predN 7) = 7 := by rfl
 __Exercise__: but is this *always* true? If not, provide a counterexample
 -/
 example : let n := sorry                  --- replace this sorry with a natural number
-  !(Nat.succ (predN n) == n) := by sorry   --- once done, replace this sorry with rfl
+  !(Nat.succ (predN n) = n) := by sorry   --- once done, replace this sorry with rfl
+
 
 /-
-We can define the predecessor a bit more succinctly, using:
-* the numeral `0` instead of `Nat.zero` in the first pattern;
-* the syntactic sugar `n + 1` instead of `Nat.succ n` in the second pattern;
-* the compact equation-style syntax, which does not require the keyword `match`.
-These simplifications lead to the following definition:
+We can also use the compact equation-style syntax introduced in the previous lecture.
+-/
+
+def isZero : Nat → Bool
+  | 0          => true
+  | Nat.succ _ => false
+
+#eval isZero 0
+#eval isZero 3
+
+/-
+The underscore `_` is a wildcard.  In the successor case we do not need to
+remember which natural number occurs inside the successor.
+
+Notice that the pattern `0` is a numeral, which is allowed in patterns.
+Patterns may also use the notation `n + 1` instead of `Nat.succ n`.  So
+`predN` can be written in a shorter way:
 -/
 
 def predN₂ : Nat → Nat
@@ -291,55 +311,14 @@ def predN₂ : Nat → Nat
 
 #eval predN₂ 7
 
-
-/-
-We exploit all the shorthands used in `predN₂`, and the `_` wildcard introduced
-in the previous lecture, to define a function `isZero` that tells whether its argument is zero.
--/
-
-def isZero : Nat → Bool
-| 0 => true
-| _ => false
-
-example : isZero 0 = true  := by rfl
-example : isZero 3 = false := by rfl
-
-
 /-
 From now on we will mostly use `n + 1` in patterns, since this is what Lean shows us in goals.
 However, it must be used consciously: writing `1 + n` in a pattern results in an error!
 
 Patterns can also be *nested*: the pattern `n + 2` means `Nat.succ (Nat.succ n)`,
 and it matches every number that is at least two.
-
--/
-
-end Pattern_matching_on_Nat
-
-
-section Recursion
-
-/-
-## Parity test
-
-In imperative languages, a familiar way to process a natural number is a loop.
-
-For example, assume that we want to compute if a number is even, but our language does
-not have a modulus operator.  In an imperative language, we could solve the problem as follows:
-
-    while n >= 2 do
-        n := n - 2
-    if n = 0 then   // n = 0 -> the number is even
-      return true
-    else            // n = 1 -> the number is odd
-      return false
-
-In functional programming we express the same idea by *recursion*.
-A function examines the input, handles the base case, and makes a recursive
-call on a smaller piece of the input.  There are no variables to update.
-
-For example, the function `isEven` computes the parity of a number.
-
+We can use it to compute the parity of a number.  A number is even when it is zero;
+it is odd when it is one; otherwise we remove two successors and continue.
 -/
 
 def isEven : Nat → Bool
@@ -355,22 +334,71 @@ example : isEven 10   := by rfl
 
 /-
 Notice the recursive call `isEven n` in the last case.  The argument of the
-recursive call is *smaller* than the original argument `n + 2`.  Lean can see this
-from the pattern: `n` is obtained from the original argument by removing two constructors.
+recursive call is smaller than the original argument `n + 2`.  Lean can see this
+from the pattern: `n` is obtained from the original argument by removing two
+constructors.
 
 For example:
 
     isEven 4  =  isEven 2  =  isEven 0  =  true
 
-This observation is fundamental to ensure termination of computations.
+This brings us to one of the central ideas of functional programming:
+recursive data are naturally processed by recursive functions.
 
 -/
 
+/-
+__Exercise__ (`plusTwo`): define a function `plusTwo` that adds 2 to its argument
+Hint: not every function needs pattern matching.
+-/
+
+def plusTwo (n : Nat) : Nat :=
+  sorry
+
+example : plusTwo 0 = 2 := by sorry
+example : plusTwo 1 = 3 := by sorry
+
 
 /-
-## Recursive addition
+__Exercise__ (`minusTwo`): define a function `minusTwo` that subtracts two from
+its argument, stopping at zero.
+-/
 
-In an imperative language, we can add `m` to `n` by counting `m` down to zero:
+def minusTwo (n : Nat) : Nat :=
+  sorry
+
+example : minusTwo 0 = 0 := by sorry
+example : minusTwo 1 = 0 := by sorry
+example : minusTwo 7 = 5 := by sorry
+
+
+/-
+__Exercise__ (`isOdd`): define `isOdd`, which is `true` exactly for the odd
+numbers.  You can do it by pattern matching, or by reusing `isEven` together
+with Boolean negation `!`.
+-/
+
+def isOdd (n : Nat) : Bool := match n with
+  | 0     => false
+  | 1     => true
+  | n + 2 => isOdd n
+
+example : isOdd 0 = false := by rfl
+example : isOdd 7 = true := by rfl
+example : isOdd 10 = false := by rfl
+
+theorem odd_iff_not_even (n: Nat) : isOdd n ↔ !(isEven n) := by sorry
+
+end Pattern_matching_on_Nat
+
+
+section Recursion
+
+/-
+## Recursive functions
+
+In an imperative language, a familiar way to process a natural number is a loop.
+For example, we can add `m` to `n` by counting `m` down to zero:
 
     result := n
     while m > 0 do
@@ -378,14 +406,19 @@ In an imperative language, we can add `m` to `n` by counting `m` down to zero:
         m := m - 1
     return result
 
-To define addition recursively, we first have to choose which of the two arguments we want
-to decrease to the base case.  Let's choose the second argument `m`.
-Then, we have the equations:
+In functional programming we express the same idea by recursion.
+A function examines the input, handles the base case, and makes a recursive
+call on a smaller piece of the input.  There are no variables to update: the
+"loop counter" is simply an argument that becomes smaller in each call.
+
+Here is addition, defined recursively on the second argument.
+
+Mathematically:
 
     n + 0     = n
     n + (m+1) = (n + m) + 1
 
-In Lean, these equations can be directly transformed into a recursive function:
+In Lean, that becomes:
 -/
 
 def addN (n m : Nat) : Nat :=
@@ -394,13 +427,13 @@ def addN (n m : Nat) : Nat :=
   | m' + 1 => Nat.succ (addN n m')
 
 #check addN
-
-example : addN 2 3 = 5          := by rfl
-example : addN (addN 1 2) 3 = 6 := by rfl
+#eval addN 2 3
+#eval addN 10 0
+#eval addN 0 7
 
 /-
 The recursive call is `addN n m'`.  The new argument `m'` is smaller than the
-original argument `m' + 1`, so any evaluation of `addN` eventually terminates.
+original argument `m' + 1`.
 
 Lean evaluates `addN 2 3` by unfolding the definition again and again:
 
@@ -434,28 +467,36 @@ Lean rejects the following definition, because the recursive call is on a
 -/
 
 /-
-__Exercise__: Re-define `addN` by using syntactic sugar and equation-style pattern matching.
+We can write the same definition using equation-style pattern matching.
 -/
 
-def addN₂ : Nat → Nat → Nat := sorry
+def addN₂ : Nat → Nat → Nat
+  | n, 0      => n
+  | n, m' + 1 => Nat.succ (addN₂ n m')
 
-example : addN₂ 4 5 = 9 := by sorry
-
+#eval addN₂ 4 5
 
 /-
+The two functions compute the same operation.  Later we will *prove* this.
 
-As expected, a function can call a previously defined function.  We do not need
-to repeat the implementation of addition every time we want to add numbers.
-This is one of the main reasons for defining small reusable functions.
-
-__Exercise__: Define a recursive function `doubleN` that doubles its argument doubleN n = n+n
+For now, try to predict the result of each expression before asking Lean to
+compute it.
 -/
 
-def doubleN (n : Nat) : Nat := sorry
+#eval addN 3 4
+#eval addN (addN 1 2) 3
 
-example : doubleN 0 = 0   := by sorry
-example : doubleN 5 = 10  := by sorry
+/-
+A function can of course call a previously defined function.  We do not need
+to repeat the implementation of addition every time we want to add numbers.
+This is one of the main reasons for defining small reusable functions.
+-/
 
+def doubleN (n : Nat) : Nat :=
+  addN n n
+
+#eval doubleN 0
+#eval doubleN 5
 
 /-
 ### Multiplication
@@ -472,9 +513,10 @@ def mulN (n m : Nat) : Nat :=
   | 0      => 0
   | m' + 1 => addN (mulN n m') n
 
-example : mulN 3 4 = 12 := by rfl
-example : mulN 7 0 = 0  := by rfl
-example : mulN 0 9 = 0  := by rfl
+#check mulN
+#eval mulN 3 4
+#eval mulN 7 0
+#eval mulN 0 9
 
 /-
 Read the recursive case from the inside out:
@@ -489,27 +531,8 @@ The structure of the program mirrors the mathematical definition.
 
 -/
 
-end Recursion
-
-
-section Exercises_on_recursion
-
 /-
-### Exercise: Test if a number is odd
-
-Define `isOdd`, which is `true` exactly for the odd numbers.
-You can do it by pattern matching, or by reusing `isEven` together with Boolean negation `!`.
--/
-
-def isOdd (n : Nat) : Bool := sorry
-
-example : isOdd 0 = false   := by sorry
-example : isOdd 7 = true    := by sorry
-example : isOdd 10 = false  := by sorry
-
-
-/-
-### Exercise: Exponentiation
+### Exponentiation
 
 Exponentiation is repeated multiplication, recursively on the exponent:
 
@@ -518,15 +541,17 @@ Exponentiation is repeated multiplication, recursively on the exponent:
 
 -/
 
-def powN (b e : Nat) : Nat := sorry
+def powN (b e : Nat) : Nat :=
+  match e with
+  | 0      => 1
+  | e' + 1 => mulN b (powN b e')
 
-example : powN 2 5 = 32 := by sorry
-example : powN 3 0 = 1  := by sorry
-example : powN 0 3 = 0  := by sorry
-
+#eval powN 2 5
+#eval powN 3 0
+#eval powN 0 3
 
 /-
-### Exercise: Factorial
+### Factorial
 
 The factorial function is defined mathematically by
 
@@ -535,51 +560,70 @@ The factorial function is defined mathematically by
 
 -/
 
-def fact : Nat → Nat := sorry
+def factorial : Nat → Nat
+  | 0     => 1
+  | n + 1 => mulN (n + 1) (factorial n)
 
-example : fact 0 = 1   := by sorry
-example : fact 1 = 1   := by sorry
-example : fact 5 = 120 := by sorry
-
-set_option maxRecDepth 2000 in --- to avoid `maximum recursion depth has been reached`
-example : fact 6 = 720 := by sorry
-
+#check factorial
+#eval factorial 0
+#eval factorial 1
+#eval factorial 5
+#eval factorial 6
 
 /-
-### Exercise: Triple
+The recursive call `factorial n` is again on a smaller natural number.
 
-Define a function `tripleN` that computes three times its argument.
-Reuse `doubleN` and `addN` instead of writing a recursive definition.
+The examples above illustrate a general principle:
+
+* inductive data suggest recursive definitions;
+* recursive definitions reduce inductive data until a base case is reached.
+
 -/
 
-def tripleN (n : Nat) : Nat := sorry
+end Recursion
+
+
+section Exercises_after_recursion
+
+/-
+## Exercises
+
+Before continuing, solve these small exercises.  They reinforce pattern
+matching and recursion.
+
+-/
+
+/-
+__Exercise__ (`tripleN`): define a function `tripleN` that computes three times
+its argument.  Reuse `doubleN` and `addN` instead of writing a recursive
+definition.
+-/
+
+def tripleN (n : Nat) : Nat :=
+  sorry
 
 example : tripleN 0 = 0  := by sorry
 example : tripleN 4 = 12 := by sorry
 
-
 /-
-### Exercise: Sum up-to
-
-Define a recursive function `sumUpTo` such that `sumUpTo n = 0 + 1 + 2 + ... + n`
+__Exercise__ (`sumUpTo`): define `sumUpTo` recursively so that
 
     sumUpTo 0       = 0
     sumUpTo (n + 1) = (n + 1) + sumUpTo n
 
+For instance, `sumUpTo 4` is `4 + 3 + 2 + 1 + 0`.
 You may use Lean's built-in `+` here.
 -/
 
-def sumUpTo (n : Nat) : Nat := sorry
+def sumUpTo (n : Nat) : Nat :=
+  sorry
 
 example : sumUpTo 0 = 0   := by sorry
 example : sumUpTo 4 = 10  := by sorry
 example : sumUpTo 10 = 55 := by sorry
 
-
 /-
-### Exercise: Fibonacci
-
-Define the Fibonacci function:
+__Exercise__ (`fibN`): define the Fibonacci function:
 
     fibN 0       = 0
     fibN 1       = 1
@@ -589,19 +633,18 @@ Observe that this definition has two base cases and *two* recursive calls.
 Lean accepts it because both calls are on smaller arguments.
 -/
 
-def fibN (n : Nat) : Nat := sorry
+def fibN (n : Nat) : Nat :=
+  sorry
 
 example : fibN 0 = 0    := by sorry
 example : fibN 1 = 1    := by sorry
 example : fibN 7 = 13   := by sorry
 example : fibN 10 = 55  := by sorry
 
-
-end Exercises_on_recursion
-
+end Exercises_after_recursion
 
 
-section Comparing_natural_numbers
+section Comparing_numbers
 
 /-
 ## Comparing numbers
@@ -634,40 +677,537 @@ def subN : Nat → Nat → Nat
   | n + 1, 0     => n + 1
   | n + 1, m + 1 => subN n m
 
-example : eqN 3 3 = true    := by rfl
-example : eqN 3 4 = false   := by rfl
-example : leN 2 5 = true    := by rfl
-example : leN 5 2 = false   := by rfl
-example : leN 4 4 = true    := by rfl
-example : subN 7 3 = 4      := by rfl
-example : subN 3 7 = 0      := by rfl
+#eval eqN 3 3
+#eval eqN 3 4
+#eval leN 2 5
+#eval leN 5 2
+#eval leN 4 4
+#eval subN 7 3
+#eval subN 3 7
 
 /-
 In each case the last equation removes one constructor from *both* arguments.
 Hence the recursive call is on smaller arguments.
+
+Lean also provides built-in comparisons: `==` computes a `Bool`, and `≤`, `<`
+are statements that Lean can decide, so they can be used directly in an `if`:
 -/
+
+#eval 3 == 3
+#eval if 3 ≤ 5 then "yes" else "no"
 
 /-
 __Exercise__ (`ltN`): define `ltN n m`, which tests whether `n < m`.
 Hint: `n < m` holds exactly when `n + 1 ≤ m`.  Reuse `leN`.
 -/
 
-def ltN (n m : Nat) : Bool := sorry
+def ltN (n m : Nat) : Bool :=
+  sorry
 
 example : ltN 2 3 = true  := by sorry
 example : ltN 3 3 = false := by sorry
 example : ltN 4 3 = false := by sorry
 
-end Comparing_natural_numbers
+end Comparing_numbers
 
+
+section Conditionals_with_Nat
 
 /-
+## Conditional expressions with natural numbers
 
-## Proofs of properties of natural numbers
+The conditional expression from the previous lecture is still useful.
+Remember that `if` is an expression: it computes a value.
 
-In the rest of the lecture we exploit Lean to formally prove some properties involving Nat.
+Now we can combine it with a Boolean-valued function on natural numbers.
+For example, `isEven n` returns a `Bool`, so it can be used as the condition
+of an `if`.
+-/
+
+def nextIfEven (n : Nat) : Nat :=
+  if isEven n then Nat.succ n else n
+
+#eval nextIfEven 0
+#eval nextIfEven 1
+#eval nextIfEven 2
+#eval nextIfEven 7
+
+/-
+This is a useful reminder that pattern matching and `if` are complementary:
+
+* use pattern matching when you want to describe the different constructors
+  of a datatype;
+* use `if` when you already have a Boolean condition and want to choose
+  between two results.
+
+Here `leN` provides the condition:
+-/
+
+def minN (n m : Nat) : Nat :=
+  if leN n m then n else m
+
+#eval minN 3 8
+#eval minN 9 4
+
+/-
+Conditionals can be chained with `else if`.  The following function computes
+a description of a number as a `String`.
+-/
+
+def describe (n : Nat) : String :=
+  if eqN n 0 then "zero"
+  else if isEven n then "even"
+  else "odd"
+
+#eval describe 0
+#eval describe 7
+#eval describe 10
+
+/-
+One more example, mixing our own functions with Lean's built-in operations.
+The *Collatz step* halves an even number, and maps an odd number `n` to
+`3n + 1`.  Repeating this step is the subject of a famous open problem!
+-/
+
+def collatzStep (n : Nat) : Nat :=
+  if isEven n then n / 2 else 3 * n + 1
+
+#eval collatzStep 6
+#eval collatzStep 7
+
+/-
+__Exercise__ (`zeroIfEven`): define `zeroIfEven` so that it returns `0` for even
+inputs and returns the original number for odd inputs.
+-/
+
+def zeroIfEven (n : Nat) : Nat :=
+  sorry
+
+example : zeroIfEven 4 = 0 := by sorry
+example : zeroIfEven 5 = 5 := by sorry
+
+/-
+__Exercise__ (`maxN`): define `maxN n m`, the larger of two numbers, using `if`
+and `leN`.
+-/
+
+def maxN (n m : Nat) : Nat :=
+  sorry
+
+example : maxN 3 8 = 8 := by sorry
+example : maxN 9 4 = 9 := by sorry
+example : maxN 5 5 = 5 := by sorry
+
+end Conditionals_with_Nat
+
+
+section Higher_order_functions
+
+/-
+## Functions as values: now with natural numbers
+
+In the previous lecture, we saw that functions are values and can be passed as
+arguments.  With natural numbers this idea becomes much more interesting,
+because we can use higher-order functions to describe repeated computation.
+
+A *higher-order function* is a function that takes another function as an
+argument, returns a function, or both.
+
+First, the simplest example: apply a function twice.
+-/
+
+def applyTwiceN (f : Nat → Nat) (n : Nat) : Nat :=
+  f (f n)
+
+#check applyTwiceN
+#eval applyTwiceN Nat.succ 5
+#eval applyTwiceN doubleN 3
+
+/-
+The parameter `f` has a function type:
+
+    Nat → Nat
+
+It is used just like any other value.  In `applyTwiceN f n`, the expression
+`f n` computes one application, and `f (f n)` computes two applications.
 
 -/
+
+/-
+We can pass an anonymous function too.
+-/
+
+#eval applyTwiceN (fun n : Nat => n + 1) 5
+#eval applyTwiceN (fun n : Nat => n * 2) 3
+
+/-
+The anonymous function
+
+    fun n : Nat => n + 1
+
+has type `Nat → Nat`.
+
+As in the previous lecture, the parameter type can often be inferred in a
+context where Lean already knows the expected function type.  Lean also has a
+shorter notation: a dot `·` marks the missing argument, so `(· + 1)` means
+`fun x => x + 1`.
+-/
+
+#check (fun n : Nat => n + 1)
+#eval applyTwiceN (fun n => n * 2) 3
+#eval applyTwiceN (· + 10) 1
+
+/-
+### Repeating a function
+
+`applyTwiceN` always repeats exactly two times.  We can generalize it by using
+a natural number to say how many times the function should be applied.
+This is the functional counterpart of a `for` loop that runs `k` times:
+
+    for i in 1 .. k do
+        n := f n
+    return n
+
+The base case is important:
+
+    applying a function zero times leaves the input unchanged.
+
+For the successor case, we apply the function `k'` times and then apply it
+once more.
+-/
+
+def iterateN (f : Nat → Nat) (k n : Nat) : Nat :=
+  match k with
+  | 0      => n
+  | k' + 1 => f (iterateN f k' n)
+
+#check iterateN
+#eval iterateN Nat.succ 5 0
+#eval iterateN Nat.succ 3 10
+#eval iterateN (fun n : Nat => n * 2) 4 1
+
+/-
+There are three roles in `iterateN`:
+
+* `f` is the operation we want to repeat;
+* `k` says how many times to repeat it;
+* `n` is the starting value.
+
+For example, here is how Lean unfolds a call with `k = 3`:
+
+    iterateN f 3 n
+    = f (iterateN f 2 n)
+    = f (f (iterateN f 1 n))
+    = f (f (f (iterateN f 0 n)))
+    = f (f (f n))
+
+This is a typical higher-order functional-programming pattern: recursion is
+used to control repetition, while the actual operation is supplied as data.
+
+(One could also define `iterateN` by calling itself on `f n`, instead of
+applying `f` at the end.  The results are the same, but proofs about the
+version above turn out to be a bit simpler.)
+
+-/
+
+/-
+We can recover `applyTwiceN` from `iterateN`:
+-/
+
+def applyTwiceN₂ (f : Nat → Nat) (n : Nat) : Nat :=
+  iterateN f 2 n
+
+#eval applyTwiceN₂ Nat.succ 5
+#eval applyTwiceN₂ doubleN 3
+
+/-
+Since `iterateN` takes any function of type `Nat → Nat`, we can use it with
+the Collatz step defined above.  Starting from 6, five steps give
+
+    6 -> 3 -> 10 -> 5 -> 16 -> 8
+-/
+
+#eval iterateN collatzStep 5 6
+
+/-
+### Partial application
+
+Recall from the previous lecture that function types associate to the right.
+Thus
+
+    Nat → Nat → Nat
+
+means
+
+    Nat → (Nat → Nat)
+
+A function can therefore be given its arguments one at a time.
+
+For example, `addN 5` is itself a function from natural numbers to natural
+numbers: it adds 5 to its argument.
+-/
+
+#check addN 5
+#eval (addN 5) 3
+#eval (addN 10) 2
+
+/-
+We can give a name to this partially applied function.
+-/
+
+def addFive : Nat → Nat :=
+  addN 5
+
+#check addFive
+#eval addFive 0
+#eval addFive 7
+
+/-
+This is another central functional-programming idea: functions are ordinary
+values, so we can store a partially applied function in a name and pass it to
+another function.
+-/
+
+#eval iterateN addFive 3 0
+
+/-
+__Exercise__ (`addTen`): define `addTen` by partial application of `addN`.
+Then use it with `iterateN`: applying `addTen` three times to 10 must give 40.
+-/
+
+def addTen : Nat → Nat :=
+  sorry
+
+example : addTen 5 = 15 := by sorry
+example : iterateN addTen 3 10 = 40 := by sorry
+
+end Higher_order_functions
+
+
+section Functions_returning_functions
+
+/-
+## Functions that return functions
+
+We can also define functions that *return* functions.
+
+For example, `makeAdder a` returns a function that adds `a` to its argument.
+-/
+
+def makeAdder (a : Nat) : Nat → Nat :=
+  fun n => addN a n
+
+#check makeAdder
+#check makeAdder 7
+#eval makeAdder 7 3
+
+/-
+Because `makeAdder 7` is a function, we can pass it directly to `iterateN`.
+-/
+
+#eval iterateN (makeAdder 2) 5 0
+
+/-
+This style is useful when a computation has a fixed parameter and a parameter
+that will be supplied later.  (Of course, `makeAdder a` behaves exactly like
+the partial application `addN a`.)
+
+The same idea works with multiplication.
+-/
+
+def makeMultiplier (a : Nat) : Nat → Nat :=
+  fun n => mulN a n
+
+#eval makeMultiplier 3 4
+#eval iterateN (makeMultiplier 2) 4 1
+
+/-
+The last expression starts at 1 and doubles four times:
+
+    1 -> 2 -> 4 -> 8 -> 16
+
+So higher-order functions let us describe a process without hard-coding the
+operation into the process itself.
+
+-/
+
+/-
+__Exercise__ (`makePower`): define `makePower e`, which returns the function
+that raises its argument to the power `e`.  For instance, `makePower 2` is the
+squaring function.  Reuse `powN`.
+
+Then predict, and check with `#eval`, the value of `iterateN (makePower 2) 3 2`.
+-/
+
+def makePower (e : Nat) : Nat → Nat :=
+  sorry
+
+example : makePower 2 5 = 25 := by sorry
+example : makePower 3 2 = 8  := by sorry
+example : makePower 0 9 = 1  := by sorry
+
+/-
+### Composition
+
+Another standard higher-order operation is function composition.
+Given
+
+    f : Nat → Nat
+    g : Nat → Nat
+
+we can build a new function that first applies `g` and then `f`.
+-/
+
+def composeN (f g : Nat → Nat) : Nat → Nat :=
+  fun n => f (g n)
+
+#check composeN
+#eval composeN Nat.succ doubleN 3
+#eval composeN doubleN Nat.succ 3
+
+/-
+The first result is 7 and the second is 8: the order matters.  In general:
+
+    composeN f g n = f (g n)
+
+so `g` is applied first.
+
+Lean has a built-in composition operator, written `∘` (type `\comp`):
+-/
+
+#eval ((fun n : Nat => n + 1) ∘ (fun n : Nat => n * 2)) 5
+
+/-
+__Exercise__ (composition): write an expression, without defining a new named
+function, that applies `doubleN` and then `Nat.succ` to the number 5.  Evaluate it
+with `#eval`; the result should be 11.  Find two different ways to write it.
+-/
+
+end Functions_returning_functions
+
+
+section Higher_order_functions_over_ranges
+
+/-
+## Higher-order functions that loop over numbers
+
+Natural numbers can also describe *how many times* or *over which range* a
+computation happens.  In an imperative language we would write a loop such as
+
+    total := 0
+    for i in 0 .. n-1 do
+        total := total + f i
+    return total
+
+The functional version is a recursive function that takes `f` as an argument.
+-/
+
+def sumBelow (f : Nat → Nat) (n : Nat) : Nat :=
+  match n with
+  | 0      => 0
+  | n' + 1 => sumBelow f n' + f n'
+
+/-
+`sumBelow f n` computes `f 0 + f 1 + ... + f (n-1)`.  Different choices of `f`
+give different sums:
+-/
+
+#eval sumBelow (fun i => i) 5          -- 0 + 1 + 2 + 3 + 4
+#eval sumBelow (fun i => i * i) 4      -- 0 + 1 + 4 + 9
+#eval sumBelow (fun _ => 1) 7          -- counts the terms
+
+/-
+The next function combines recursion, `if`, and a *predicate*: a function that
+returns a `Bool`.  It counts how many numbers below `n` satisfy the predicate.
+-/
+
+def countBelow (p : Nat → Bool) (n : Nat) : Nat :=
+  match n with
+  | 0      => 0
+  | n' + 1 => if p n' then countBelow p n' + 1 else countBelow p n'
+
+#eval countBelow isEven 10                 -- 0, 2, 4, 6, 8
+#eval countBelow (fun i => leN 3 i) 10     -- 3, 4, ..., 9
+
+/-
+Notice that we passed our own function `isEven` as an argument.  Functions
+we define are ordinary values, usable everywhere.
+
+-/
+
+/-
+__Exercise__ (`anyBelow`): define `anyBelow p n`, which returns `true` if *some*
+number below `n` satisfies the predicate `p`, and `false` otherwise.
+Use `if` in the recursive case.
+-/
+
+def anyBelow (p : Nat → Bool) (n : Nat) : Bool :=
+  sorry
+
+example : anyBelow (fun i => eqN i 3) 5 = true := by sorry
+example : anyBelow (fun i => eqN i 7) 5 = false := by sorry
+example : anyBelow isEven 0 = false := by sorry
+
+/-
+__Exercise__ (`sumOfSquares`): define `sumOfSquares n`, the sum of the squares
+of the numbers below `n`, by reusing `sumBelow` with an anonymous function.
+-/
+
+def sumOfSquares (n : Nat) : Nat :=
+  sorry
+
+example : sumOfSquares 0 = 0 := by sorry
+example : sumOfSquares 4 = 14 := by sorry
+
+end Higher_order_functions_over_ranges
+
+
+section Arithmetic_by_iteration
+
+/-
+## Arithmetic as iteration
+
+We can combine the ideas from the lecture.  Arithmetic operations are
+repeated applications of simpler ones:
+
+* adding `m` means taking the successor `m` times;
+* multiplying by `m` means adding `n` repeatedly, `m` times, starting from 0;
+* raising to the power `e` means multiplying by `b` repeatedly, `e` times,
+  starting from 1.
+
+Using `iterateN`, each of these is a one-line definition.  The operation that
+is repeated is passed explicitly, often by partial application or by an
+anonymous function.
+-/
+
+def addByIterate (n m : Nat) : Nat :=
+  iterateN Nat.succ m n
+
+def mulByIterate (n m : Nat) : Nat :=
+  iterateN (fun x => addN x n) m 0
+
+def powByIterate (b e : Nat) : Nat :=
+  iterateN (mulN b) e 1
+
+#eval addByIterate 3 4
+#eval mulByIterate 3 4
+#eval powByIterate 2 5
+#eval powByIterate 3 4
+
+/-
+This is an example of two different implementations expressing the same idea:
+
+* `powN` follows the usual recursive mathematical definition of exponentiation;
+* `powByIterate` separates the control of repetition (`iterateN`) from the
+  operation being repeated (`mulN b`).
+
+The second definition is particularly interesting from a functional-programming
+point of view because the operation is passed explicitly as a function.
+We will prove below that, for `addN` and `powN`, the two styles agree.
+
+-/
+
+end Arithmetic_by_iteration
 
 
 section Proofs_by_simplification
@@ -683,31 +1223,30 @@ Here the tactic `rfl` works because both sides reduce by computation to the same
 -/
 
 /-
-Besides these simple cases, `rfl` can also prove more interesting facts involving
-quantified variables.  For example, since `addN` recurses on its *second* argument,
-if in a property such argument is zero, then `rfl` works, since `addN n 0` can be computed.
+The definition of `addN` recurses on its *second* argument.  So the following
+two equations can be read directly off the definition, and `rfl` proves them
+even though `n` and `m` are arbitrary natural numbers.
 -/
 
 theorem addN_zero (n : Nat) : addN n 0 = n := by
   rfl
 
-/-
-The `rfl` tactic also works for the following property, which holds by unfolding the
-definition of `addN`.
--/
-
-theorem addN_succ_right (n m : Nat) : addN n (m + 1) = (addN n m) + 1 := by rfl
+theorem addN_succ (n m : Nat) : addN n (m + 1) = (addN n m) + 1 := by
+  rfl
 
 /-
-__Exercise__: prove the corresponding theorems for `mulN`:
-* `mulN_zero`: n * 0 = 0;
-* `mulN_succ`: n * (m+1) = n * m + n
+Similarly for multiplication:
 -/
 
-theorem mulN_zero (n : Nat) : mulN n 0 = 0 := by sorry
+theorem mulN_succ (n m : Nat) : mulN n (m + 1) = addN (mulN n m) n := by
+  rfl
 
-theorem mulN_succ (n m : Nat) : mulN n (m + 1) = addN (mulN n m) n := by sorry
+/-
+__Exercise__: prove the corresponding theorem for `mulN` and zero on the right.
+-/
 
+theorem mulN_zero (n : Nat) : mulN n 0 = 0 := by
+  sorry
 
 end Proofs_by_simplification
 
@@ -718,54 +1257,23 @@ section Proofs_by_rewriting
 /-
 ### Rewriting
 
-Theorems are not only to be proved: they can be *used* in the proofs of other theorems.
-The tactic `rw [h]`, where `h` is an equation `a = b`, replaces `a` by `b` in the goal.
+Theorems are not only to be proved: they can be *used*.  The tactic `rw [h]`,
+where `h` is an equation `a = b`, replaces `a` by `b` in the goal.  If the goal
+becomes of the form `x = x`, `rw` closes it automatically.
 -/
 
 theorem succ_addN_zero : ∀ n : Nat, Nat.succ (addN n 0) = Nat.succ n := by
-  intros n          --- chooses a name for the quantified variable
+  intros n
   rw [addN_zero]    --- addN n 0 = n
 
-/-
-To understand why such proof works, place the cursor at the left of the `rw` and
-look at the goal in the Infoview:
 
-  (addN n 0).succ = n.succ
-
-We know from theorem `addN_zero` that `addN n 0 = n`. Therefore, after rewriting we
-have an equality.
--/
-
-/-
-Here is another example of application of the `rw` tactic.
--/
-theorem addN_id : ∀ n m : Nat,
+/- bart: TODO COMMENT?? -/
+theorem plus_id_example : ∀ n m : Nat,
   n = m →
   n + n = m + m := by
   intros n m        --- choose names for universally quantified variables
   intros h          --- move the antecedent of the implication into the hypotheses
-  rw [h]            --- rewrite h in the goal using the hypothesis h (left-to-right)
-
-/-
-Note a small difference between the previous proofs:
-* In `succ_addN_zero`, the equality used in `rw` is taken from another theorem (`addN_zero`)
-* In `addN_id`, the equality used in `rw` is taken from the *context*.
--/
-
-/-
-It is important to note that rewritings have a direction. In the previous proofs, this
-direction was implicitly from *left-to-right*.  For example, after the application of
-`rw [h]` in `addN_id`, the goal is reduced into `m = m` (check the Infoview).
-
-It is also possible to apply rewriting *right-to-left* (check the difference in the Infoview).
--/
-theorem addN_id₂ : ∀ n m : Nat,
-  n = m →
-  n + n = m + m := by
-  intros n m        --- choose names for universally quantified variables
-  intros h          --- move the antecedent of the implication into the hypotheses
-  rw [<-h]          --- rewrite h in the goal using the hypothesis h (right-to-left)
-
+  rw [h]            --- rewrite h in the goal using the hypothesis h
 
 /-
 ### Facts that do *not* hold by computation
@@ -785,24 +1293,18 @@ Lean reports an error.  We need a new idea: reason by *cases* or by *induction*.
 
 -/
 
-end Proofs_by_rewriting
-
-
-
-section Proofs_by_case_analysis
-
 /-
 ### Case analysis
 
-The `cases` tactic is the proof counterpart of pattern matching in definitions.
-For a natural number `n` there are two cases:
+The `cases` tactic is the proof analogue of pattern matching.  For a natural
+number `n` there are two cases:
 
 * `n = 0`;
 * `n = k + 1` for some natural number `k`.
 
 Lean creates one goal for each case.  Consider the statement that `leN n 0` is
-true if and only if `n` is zero, expressed by comparing it with `isZero n`.
-Neither side can be computed while `n` is unknown, but each case can be.
+true exactly when `n` is zero, expressed by comparing it with `isZero n`.  Neither
+side can be computed while `n` is unknown, but each case can be.
 -/
 
 theorem leN_zero_right (n : Nat) : leN n 0 = isZero n := by
@@ -811,490 +1313,331 @@ theorem leN_zero_right (n : Nat) : leN n 0 = isZero n := by
   | succ _ => rfl
 
 /-
-After `cases n with`, we write one alternative for each constructor.
-In the `succ` case Lean would give a name to the number inside the successor; here
-we do not need it, so we use the wildcard `_`.
+After `cases n with`, we write one alternative for each constructor.  In the
+`succ` case Lean would give a name to the number inside the successor; here
+we do not need it, so we write `_`.
 
-__Exercise__: Prove in the same way that `isZero n = eqN n 0`.
+__Exercise__: prove in the same way that `isZero n = eqN n 0`.
 -/
 
 theorem isZero_eq_eqN (n : Nat) : isZero n = eqN n 0 := by
   sorry
 
+end Proofs_by_rewriting
+
+
+section Induction
 
 /-
-### Case analysis on an equality
+## Induction: the proof counterpart of recursion
 
-Let us prove that `Nat.succ` is injective: two natural numbers with the same
-successor are equal.
+Case analysis is not enough for `addN 0 n = n`: in the successor case we
+get the goal for `k + 1`, but to solve it we need to know the result for `k`.
+This is exactly what *mathematical induction* provides.
+
+Suppose we want to prove a property `P n` for every natural number `n`.
+The induction principle says that it is enough to prove:
+
+1. `P 0`                       -- the base case;
+2. `P n -> P (n + 1)`          -- the successor case.
+
+The second part says that if the property is true for an arbitrary `n`, then
+it is true for its successor.
+
+In Lean, the `induction` tactic exposes exactly these cases.  In the successor
+case, we also get the *induction hypothesis* `ih`: the statement for the smaller
+number.
+
 -/
 
-theorem succN_injective : ∀ n m : Nat, Nat.succ n = Nat.succ m → n = m := by
-  intros n m h
-  cases h
-  rfl
+theorem zero_addN (n : Nat) : addN 0 n = n := by
+  induction n with
+  | zero => rfl
+  | succ n' ih => rw [addN_succ, ih]
 
 /-
-After `intros n m h`, Lean shows (it may print `n.succ` for `Nat.succ n`):
+Let us follow the proof.  After `induction n with`, Lean shows two goals:
 
-    n m : Nat
-    h : Nat.succ n = Nat.succ m
-    ⊢ n = m
+    case zero:   addN 0 0 = 0
+    case succ:   ih : addN 0 n' = n'
+                 ⊢ addN 0 (n' + 1) = n' + 1
 
-Until now we used `cases` on natural numbers.  Here we use it on the
-hypothesis `h`, which is itself a *proof*.
+* The first goal follows by computation, so `rfl` works.
+* In the second goal, `rw [addN_succ]` rewrites `addN 0 (n' + 1)` into
+  `addN 0 n' + 1`.  Then `rw [ih]` replaces `addN 0 n'` by `n'`, and the goal
+  becomes `n' + 1 = n' + 1`, which `rw` closes by itself.
 
-Equality is an inductive type with one constructor:
+This is a very important correspondence:
 
-    Eq.refl a : a = a
+    PROGRAMMING                  PROVING
+    ------------------------------------------------
+    match n with ...             cases n with ...
+    recursive call on n'         induction hypothesis about n'
+    base case                    base case
+    recursive case               successor case
 
-(Actually, the term `rfl` is a shorthand for this constructor. In tactic mode, the
-`rfl` tactic closes an equality goal by constructing such a proof.)
+The proof has the same shape as the recursive function it talks about.
 
-Thus, when we write `cases h` in our proof, Lean considers the only possible constructor
-case for an equality proof: the case where `h` is a reflexivity proof.
-
-Let us see what this means in our example. A reflexivity proof for `Nat.succ n` has type:
-
-    Eq.refl (Nat.succ n) : Nat.succ n = Nat.succ n
-
-But the type of `h` is:
-
-    Nat.succ n = Nat.succ m
-
-To make these two types agree, Lean must match:
-
-    Nat.succ n    with    Nat.succ m
-
-Both expressions are built using the same constructor, `Nat.succ`, so their
-arguments must match. Lean therefore *unifies* `m` with `n`.
-
-Indeed, the context and goal then become:
-
-    n : Nat
-    h : Nat.succ n = Nat.succ n         (this may be removed from the Infoview)
-    ⊢ n = n
-
-The final goal is a reflexive equality, so `rfl` proves it.
-
-This does not mean that every equality proof must literally be written using
-`rfl`: equality proofs may be obtained from hypotheses or other theorems.
-Rather, it means that `Eq.refl` is the only constructor case that must be
-considered when eliminating an equality proof.
 -/
 
 /-
-Note that if `h` states an impossible equality, such as
-
-    h : Nat.succ n = 0
-
-the reflexive constructor case would be impossible: `Nat.succ` and `Nat.zero`
-are different constructors. Consequently, `cases h` would close the goal
-without producing any new goals.
+Another example, with the successor on the *left* of an addition.  We induct
+on `m`, since `addN` is recursive on its second argument.
 -/
 
-theorem succ_ne_zero_example (n : Nat) : Nat.succ n = 0 → False := by
-  intro h
-  cases h
-
-
-end Proofs_by_case_analysis
-
-
-section Proofs_by_exact
+theorem addN_succ_left (n m : Nat) : addN (n + 1) m = addN n m + 1 := by
+  induction m with
+  | zero => rfl
+  | succ m' ih => rw [addN_succ, addN_succ, ih]
 
 /-
-### Closing a goal with `exact`
+The first `rw [addN_succ]` unfolds one of the two additions, the second one
+unfolds the other, and `ih` finishes the job.
 
-Let us prove that equality is transitive: if `a = b` and `b = c`, then `a = c`.
-Formally, the statement says: for all natural numbers `a`, `b`, `c`,
-if `a = b`, then if `b = c`, then `a = c` (parentheses are only used for clarity).
+Tactic proofs of this shape are often written in a shorter way using `simp`,
+which repeatedly rewrites using the definitions and lemmas we give it.  For
+example, the successor case above could be written
+
+    | succ m' ih => simp [addN, ih]
+
+We will use both styles.  The explicit `rw` version is better for understanding
+the proof, `simp` is faster to write.
+
 -/
 
-theorem eq_trans : ∀ a b c : Nat, (a = b) → (b = c) → (a = c) := by
-  intros a b c      --- choose names for quantified variables
-  intros h1         --- move assumption `a = b` to context
-  intros h2         --- move assumption `b = c` to context
-  rw [h1]           --- rewrites `h1` in the goal
-  exact h2          --- applies `h2` to close the goal
-
 /-
-The `intros` tactic moves the assumptions of the statement to the context,
-giving them names.  After the three `intros`, Lean shows:
-
-    a b c : Nat
-    h1 : a = b
-    h2 : b = c
-    ⊢ a = c
-
-Hypotheses are proofs.  `h1` is a proof of `a = b`, and `h2` is a proof of `b = c`.
-We have to prove `a = c`.
-
-The tactic `rw [h1]` replaces `a` by `b` in the goal.  The goal becomes
-
-    ⊢ b = c
-
-`rw` tries to close the goal with `rfl`, but `b` and `c` are different variables,
-so the goal stays open.
-
-Now the goal is exactly the statement of the hypothesis `h2`.  The tactic
-`exact h2` closes the goal by providing a proof of *exactly* what remains to
-be proved.  In general:
-
-    exact t     closes the current goal if `t` is a proof of the goal.
-
-The term `t` is often a hypothesis, as here, or a theorem applied to arguments,
-such as `addN_zero n`.
-
-We can rewrite the statement in an alternative way, omitting quantifiers.
-The proof is the same.
+We can now prove commutativity of our addition function.  This is a slightly
+larger proof, and it shows how earlier lemmas are reused.
 -/
 
-theorem eq_trans₂ (a b c : Nat) (h1 : a = b) (h2 : b = c) : a = c := by
-  rw [h1]
-  exact h2
+theorem addN_comm (n m : Nat) : addN n m = addN m n := by
+  induction m with
+  | zero => rw [addN_zero, zero_addN]
+  | succ m' ih => rw [addN_succ, addN_succ_left, ih]
 
 /-
-We can also rewrite within the context. We illustrate this feature on the same statement.
-Check how the context changes in the Infoview.
--/
-
-theorem eq_trans₃ (a b c : Nat) (h1 : a = b) (h2 : b = c) : a = c := by
-  rw [<- h1] at h2
-  exact h2
-
-
-/-
-__Exercise__: (`addN_zero_eq`) Use `rw` and `exact` to prove the following property.
--/
-
-theorem addN_zero_eq (n m : Nat) (h : n = m) : addN n 0 = m := by
-  sorry
-
-/-
-__Exercise__: (`addN_zero_trans`) Prove the following property.
--/
-
-theorem addN_zero_trans : ∀ a b c : Nat, a = b → b = c → addN a 0 = c := by
-  sorry
-
-end Proofs_by_exact
-
-
-
-section Proofs_with_have
-
-/-
-## Intermediate facts with `have`
-
-A proof can be easier to understand if we divide it into smaller steps.
-The `have` tactic lets us prove an intermediate fact and give it a name.
--/
-
-example (a b c : Nat) (hab : a = b) (hbc : b = c) :
-    Nat.succ a = Nat.succ c := by
-  have hac : a = c := by    -- first prove the intermediate fact `a = c`
-    rw [hbc] at hab         -- (look at the changed hypothesis)
-    exact hab
-  cases hac                 -- then use the intermediate fact `hac`.
-  rfl
-
-/-
-The general form is:
-
-    have name : proposition := by
-      proof
-
-Lean temporarily changes the goal to `proposition`. Once that proposition has
-been proved, the original goal is restored and the new fact is available as
-`name`.
-
-Using `have` is useful when an intermediate result has a clear meaning or will
-be used later in the proof.
--/
-
-
-end Proofs_with_have
-
-
-
-section Proofs_by_backward_reasoning
-
-/-
-### Backward reasoning
-
-Let us use `succN_injective` to prove that two successors can be removed on
-both sides of an equation. Note that `succN_injective a b` is not an equation.
-It is an implication:
-
-    succN_injective a b : Nat.succ a = Nat.succ b → a = b
-
-Its *conclusion* is `a = b`, and its *premise* is `Nat.succ a = Nat.succ b`.
-We can use such a theorem to reason *backwards*: to prove the conclusion, it is
-enough to prove the premise.  Lean offers two ways of doing it.
-
-#### First way: `rw` with a conditional equation
--/
-
-theorem succ_succ_injective (a b : Nat) : a.succ.succ = b.succ.succ → a = b := by
-  intro h
-  rw [<- succN_injective a b]
-  rw [<- succN_injective a.succ b.succ]
-  exact h
-
-/-
-After `intro h`, Lean shows:
-
-    h : a.succ.succ = b.succ.succ
-    ⊢ a = b
-
-The theorem `succN_injective a b` has the equation `a = b` as conclusion, so
-`rw` can use it.  The arrow `<-` (also written `←`) means "from right to left":
-`b` is replaced by `a`.  The goal becomes `a = a`, which `rw` closes by `rfl`.
-The premise of the theorem does not disappear: it becomes the new goal,
-
-    ⊢ a.succ = b.succ
-
-The second `rw` does the same one level up and leaves
-
-    ⊢ a.succ.succ = b.succ.succ
-
-which is the hypothesis `h`.  So `exact h` finishes the proof.
-
-#### Second way: `apply`
-
-The tactic `apply` expresses the same idea directly.
--/
-
-theorem succ_succ_injective₂ (a b : Nat) : a.succ.succ = b.succ.succ → a = b := by
-  intro h
-  apply succN_injective a b
-  apply succN_injective a.succ b.succ
-  exact h
-
-/-
-The rule is:
-
-    apply t     where `t : P → Q` and the current goal is `Q`:
-                replaces the goal `Q` by the goal `P`.
-
-In words: "to prove `Q` it is enough to prove `P`, because `t` turns a proof
-of `P` into a proof of `Q`".  Let us follow our proof:
-
-    after intro h:
-        h : a.succ.succ = b.succ.succ
-        ⊢ a = b
-
-    after apply succN_injective a b:
-        ⊢ a.succ = b.succ              -- the premise
-
-    after apply succN_injective a.succ b.succ:
-        ⊢ a.succ.succ = b.succ.succ    -- the premise again
-
-The last goal is exactly `h`, so `exact h` closes it.  (Lean may print
-`a.succ` as `a + 1`: it is the same statement.)
-
-Some details worth remembering:
-
-* If `t` has several premises, `t : P1 → P2 → Q`, then `apply t` creates one
-  goal for each premise, in order.
-* If `t` has no premises, `apply t` simply closes the goal, like `exact t`.
-* The goal must match the *conclusion* of `t`.  If it does not, Lean reports
-  an error showing both statements, as with `exact`.
-* Often Lean can find the arguments by itself.  Try writing `apply succN_injective`
-  without `a b`: Lean compares the conclusion `?n = ?m` with the goal `a = b`.
-
-Compare the three tools we now know for using a theorem `t`:
-
-    exact t     the statement of `t` is exactly the goal;
-    rw [t]      `t` is an equation, and we want to rewrite with it;
-    apply t     `t` is an implication, and its conclusion is the goal:
-                we continue with its premises.
-
-The `apply` proof is also more flexible than `rw`: `rw` needs the conclusion
-to be an equation, while `apply` works with any statement.
-
-Finally, we can also reason *forwards*, from the hypothesis to the goal, by
-applying the theorem to a proof, in one single step:
-
-    exact succN_injective a b (succN_injective a.succ b.succ h)
-
-All three proofs are correct.  The `rw` and `apply` versions work backward from
-the goal and show a new goal after each step, which makes them easy to follow
-in the Infoview.  The `exact` version builds the whole proof at once.
--/
-
-end Proofs_by_backward_reasoning
-
-
-/-
-## Summary
+The proof above is a useful milestone.  We have gone from a short recursive
+program to a mathematical property about the program, and Lean has checked the
+proof mechanically.
 
 We do not need to know every tactic in Lean to do this.  A small toolkit is
 already enough for many elementary proofs:
 
 * `rfl`       -- close an equality that follows by computation;
-* `rw [h]`    -- rewrite the goal using the equation `h` (left-to-right);
-* `rw [<-h]`  -- rewrite the goal using the equation `h` (right-to-left);
-* `exact`     -- closes the goal using a hypothesis in the context;
-* `apply`     -- applies an implication in the context to a goal;
+* `rw [h]`    -- rewrite the goal using the equation `h`;
 * `simp`      -- repeatedly simplify using definitions and known lemmas;
-* `have`      -- prove intermediate facts;
 * `cases`     -- split an inductive value into its constructors;
+* `induction` -- reason recursively about an inductive value.
+
 -/
+
+/-
+__Exercise__ (`zero_mulN`): prove that `mulN 0 n = 0`.
+
+Hint: induction on `n`.  The successor case needs `mulN_succ`, `addN_zero`, and
+the induction hypothesis `ih`.  You can use them with `rw [...]` or inside
+`simp [...]`.
+-/
+
+theorem zero_mulN (n : Nat) : mulN 0 n = 0 := by
+  sorry
+
+end Induction
+
+
+section Proofs_about_higher_order_functions
+
+/-
+## Proving facts about higher-order functions
+
+Higher-order functions are ordinary functions, so we can reason about them in
+the same way.
+
+First, `applyTwiceN` is just `iterateN` with two repetitions.  Both sides compute
+to `f (f n)`, so `rfl` suffices:
+-/
+
+theorem applyTwiceN_eq_iterateN (f : Nat → Nat) (n : Nat) :
+    applyTwiceN f n = iterateN f 2 n := by
+  rfl
+
+/-
+Second, we prove what we claimed in the section on arithmetic by iteration:
+adding `m` really is taking the successor `m` times.  The statement is about
+an arbitrary number `m`, hence we use induction.
+-/
+
+theorem iterate_succ (n m : Nat) : iterateN Nat.succ m n = addN n m := by
+  induction m with
+  | zero => rfl
+  | succ m' ih => simp [iterateN, addN, ih]
+
+/-
+Here `simp` unfolds both sides of the successor case, rewrites with `ih`, and
+the two sides become identical.
+
+The same proof structure works for powers.  Repeatedly multiplying by `b`,
+starting from 1, is exponentiation: the two implementations `powByIterate`
+and `powN` agree.
+-/
+
+theorem iterate_mulN (b e : Nat) : iterateN (mulN b) e 1 = powN b e := by
+  induction e with
+  | zero => rfl
+  | succ e' ih => simp [iterateN, powN, ih]
+
+/-
+Notice how these theorems connect what we have learned: recursion defines
+`iterateN`, higher-order arguments describe the repeated operation, and
+induction proves that the result coincides with the direct definition.
+
+-/
+
+end Proofs_about_higher_order_functions
 
 
 section Exercises
 
 /-
 ## Exercises
+
+The following exercises collect the main ideas of the lecture.
+Try to solve them without looking back at the earlier definitions first.
+
+As before, programming exercises come with tests (or `#eval` lines whose
+expected result is given in a comment).  For proofs, Lean accepts the
+exercise when `sorry` has been replaced by a complete proof.
+
 -/
 
 /-
-### Exercise: Equivalent definitions of successor
+### Exercise 1: repeated addition as a higher-order function
+
+Define `repeatAdd k a`, a *function* that adds `a` to its argument, `k` times.
+Its type should have the form
+
+    Nat → Nat → Nat → Nat
+
+Use `iterateN` and partial application (or an anonymous function).
 -/
 
-theorem addN_one_right (n : Nat) : addN n 1 = Nat.succ n := by
+def repeatAdd (k a : Nat) : Nat → Nat :=
   sorry
 
+example : repeatAdd 3 5 10 = 25 := by sorry
+example : repeatAdd 0 5 10 = 10 := by sorry
 
 /-
-### Exercise: Adding successors
+### Exercise 2: powers of two
 
-Prove the following property. Hint: use existing properties about addN and successors
+Define `powerOfTwo k`, which computes `2 ^ k` by iterating `doubleN` starting
+from 1.  Do not use `powN`.
 -/
 
-theorem addN_self_succ (n : Nat) : addN (n + 1) (n + 1) = addN n n + 1 + 1 := by
+def powerOfTwo (k : Nat) : Nat :=
   sorry
 
+example : powerOfTwo 0 = 1  := by sorry
+example : powerOfTwo 6 = 64 := by sorry
 
 /-
-### Exercise: Repeated rewriting
+### Exercise 3: prime numbers
 
-Use `addN_succ_right` twice.  Observe the goal in the Infoview after each
-application of `rw`.
+A number is prime when it has exactly two divisors: 1 and itself.
+
+(a) Define `countDivisors n`, the number of divisors of `n` between 1 and `n`.
+
+    Hint: reuse `countBelow`.  The test `d` divides `n` is `n % d == 0`.
+    Since `countBelow p n` looks at the numbers `0, ..., n-1`, the divisor to
+    test is `d + 1`.
+
+(b) Define `isPrimeN n`, which is `true` exactly when `countDivisors n` is 2.
 -/
 
-theorem addN_two_steps (n m : Nat) :
-    addN n (m + 1 + 1) = addN n m + 1 + 1 := by
+def countDivisors (n : Nat) : Nat :=
   sorry
 
-
-/-
-### Exercise: Rewriting a hypothesis
-
-Rewrite both occurrences of `addN` in `h`, using `addN_zero n` and
-`addN_zero m`.  Then close the goal with `exact`.
--/
-
-theorem addN_zero_cancel (n m : Nat)
-    (h : addN n 0 = addN m 0) : n = m := by
+def isPrimeN (n : Nat) : Bool :=
   sorry
 
+-- #eval countDivisors 6      -- expected: 4  (1, 2, 3, 6)
+-- #eval countDivisors 7      -- expected: 2
+-- #eval countDivisors 12     -- expected: 6
+-- #eval isPrimeN 0           -- expected: false
+-- #eval isPrimeN 1           -- expected: false
+-- #eval isPrimeN 7           -- expected: true
+-- #eval isPrimeN 9           -- expected: false
+-- #eval isPrimeN 13          -- expected: true
 
 /-
-### Exercise: Rewriting from right to left
+### Exercise 4: compare two implementations
 
-Use `hab` from right to left in the goal, and then use `exact`.
+We have two definitions of addition, `addN` and `addN₂`.  Prove that they
+compute the same function.
+
+Hint: induction on the second argument is a natural choice.  Compare the two
+definitions: the successor case should be solved by `simp [addN, addN₂, ih]`,
+or by an explicit `rw`.
 -/
 
-theorem eq_from_common_left (a b c : Nat)
-    (hab : a = b) (hac : a = c) : b = c := by
-  sorry
-
-
-/-
-### Exercise: Case analysis on a natural number
-
-Prove the result by considering the `zero` and `succ` cases for `n`.  Both
-resulting goals can be closed by computation.
--/
-
-theorem leN_eq_eqN_zero (n : Nat) : leN n 0 = eqN n 0 := by
-  sorry
-
-
-/-
-### Exercise: Case analysis on an impossible equality
-
-Introduce the equality as a hypothesis and then perform case analysis on it.
--/
-
-theorem zero_ne_succ (n : Nat) : 0 = Nat.succ n → False := by
-  sorry
-
-
-/-
-### Exercise: Backward reasoning with two premises
-
-Use `apply eq_trans₂ a b c`.  This creates two goals: solve them using the
-hypotheses `hab` and `hbc`.
--/
-
-theorem eq_trans_apply (a b c : Nat)
-    (hab : a = b) (hbc : b = c) : a = c := by
-  sorry
-
-
-/-
-### Exercise: Repeated backward reasoning
-
-Use `succN_injective` three times with `apply`, and finish with `exact h`.
--/
-
-theorem succ_succ_succ_injective (a b : Nat) :
-    Nat.succ (Nat.succ (Nat.succ a)) =
-      Nat.succ (Nat.succ (Nat.succ b)) →
-    a = b := by
-  sorry
-
-
-/-
-### Exercise: Intermediate facts with `have`
-
-First use `have` and `succN_injective` to obtain proofs of `a = b` and
-`b = c`.  Then combine these intermediate facts to prove `a = c`.
--/
-
-theorem eq_from_succ_chain (a b c : Nat)
-    (hab : Nat.succ a = Nat.succ b)
-    (hbc : Nat.succ b = Nat.succ c) : a = c := by
-  sorry
-
-
-/-
-### Exercise: Simplification using a hypothesis
-
-Use `simp [h]` to replace `eqN a b` with `false` and compute its Boolean
-negation.
--/
-
-theorem not_eqN_of_false (a b : Nat) (h : eqN a b = false) :
-    !(eqN a b) = true := by
+theorem addN_eq_addN₂ (n m : Nat) : addN n m = addN₂ n m := by
   sorry
 
 /-
-### Exercise: Summing up equal numbers
+### Exercise 5: iterating the identity
 
-Solve this by way of rewriting the right theorems or assumptions.
+Prove that applying the identity function any number of times does not change
+its argument.  Hint: induction on the number of iterations `k`.
 -/
 
-theorem plus_id : ∀ n m o : Nat, n = m → m = o → n + m = m + o := by sorry
+def identityN (n : Nat) : Nat :=
+  n
+
+theorem iterate_identity (k n : Nat) : iterateN identityN k n = n := by
+  sorry
 
 /-
-### Exercise: Multiplying by zero
+### Exercise 6: composition is associative
 
-Solve this by way of rewriting the right theorems or assumptions.
+Prove that composing three functions does not depend on how we put the
+parentheses.  Both sides are functions, and they have the same definition
+after unfolding `composeN`.  No induction is needed.
 -/
 
-theorem mult_n_0_m_0 : ∀ n m : Nat, addN (mulN n 0) (mulN m 0) = 0 := by sorry
+theorem composeN_assoc (f g h : Nat → Nat) :
+    composeN (composeN f g) h = composeN f (composeN g h) := by
+  sorry
 
 /-
-### Exercise: One ain't double
+### Exercise 7 (challenge): associativity of addition
 
-Hint: you can discharge a contradiction `h` with `cases h`.
+Prove that `addN` is associative.
+
+Hint: induction on `k`.  In the successor case, unfold the additions with
+`addN_succ`, and finish with the induction hypothesis.
 -/
 
-theorem one_not_double : ∀ n, 1 = mulN 2 n → False := by sorry
+theorem addN_assoc (n m k : Nat) :
+    addN (addN n m) k = addN n (addN m k) := by
+  sorry
+
+/-
+### Exercise 8: design your own function
+
+Choose a useful function on natural numbers that can be defined recursively.
+Examples include a function that counts how many times an even number can be
+halved, a function computing the sum of the first `n` odd numbers, or a
+higher-order function of your own invention.
+
+Write:
+
+1. its type;
+2. its recursive definition;
+3. three `#eval` examples;
+4. one simple theorem about it, with a proof.
+
+Keep the function small enough that you can understand every recursive call.
+
+-/
 
 end Exercises
