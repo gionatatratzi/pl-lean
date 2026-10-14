@@ -293,7 +293,14 @@ This does not require induction.  Use `addN_succ_right` and `addN_succ_left`.
 -/
 
 theorem addN_self_succ (n : Nat) : addN (n + 1) (n + 1) = addN n n + 1 + 1 := by
-  sorry
+  induction n with
+  | zero =>
+    rw [addN_zero]
+    rw [addN_succ_left]
+    rfl
+  | succ n' ih =>
+    rw [addN_succ_left]
+    rw [addN_succ_right]
 
 /-
 ### Exercise: Associativity of addN
@@ -307,7 +314,15 @@ Hint: induction on `k`.  In the successor case, unfold the additions with
 -/
 
 theorem addN_assoc (n m k : Nat) : addN (addN n m) k = addN n (addN m k) := by
-  sorry
+  induction k with
+  | zero =>
+    rw [addN_zero]
+    rw [addN_zero]
+  | succ k' ih =>
+    rw [addN_succ_right]
+    rw [addN_succ_right]
+    rw [ih]
+    rw [addN_succ_right]
 
 /-
 ### Exercise: Zero is left-absorbing for mulN
@@ -321,7 +336,12 @@ holds by computation.
 -/
 
 theorem mulN_zero_left (n : Nat) : mulN 0 n = 0 := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih =>
+    rw [mulN_succ_right]
+    rw [ih]
+    rfl
 
 
 /-
@@ -338,7 +358,12 @@ hypothesis.  The remaining equality follows by computation.
 #check mulN_succ_right
 
 theorem mulN_one_left (n : Nat) : mulN 1 n = n := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih =>
+    rw [mulN_succ_right]
+    rw [ih]
+    rfl
 
 
 /-
@@ -374,7 +399,21 @@ Infoview.  The proof has three phases.
 -/
 
 theorem mulN_succ_left (n m : Nat) : mulN (n + 1) m = addN (mulN n m) m := by
-  sorry
+  induction m with
+  | zero =>
+    rw [mulN_zero_right]
+    rw [mulN_zero_right]
+    rfl
+  | succ m' ih =>
+    let x := mulN n m'
+    rw [mulN_succ_right]
+    rw [mulN_succ_right]
+    rw [ih]
+    rw [addN_succ_right]
+    rw [addN_succ_right]
+    rw [addN_assoc]
+    rw [addN_assoc]
+    rw [addN_comm m' n]
 
 
 /-
@@ -388,7 +427,14 @@ Hint: in the inductive case, exploit `mulN_succ_right` and `mulN_succ_left`.
 -/
 
 theorem mulN_comm (n m : Nat) : mulN n m = mulN m n := by
-  sorry
+  induction m with
+  | zero =>
+    rw [mulN_zero_right]
+    rw [mulN_zero_left]
+  | succ m' ih =>
+    rw [mulN_succ_right]
+    rw [mulN_succ_left]
+    rw [ih]
 
 
 /-
@@ -411,7 +457,18 @@ and `mulN` can then unfold.  So the natural choice is induction on `c`.
 -/
 
 theorem mulN_addN_distrib_left (a b c : Nat) : mulN a (addN b c) = addN (mulN a b) (mulN a c) := by
-  sorry
+  induction c with
+  | zero =>
+    rw [addN_zero]
+    rw [mulN_zero_right]
+    rw [addN_zero]
+  | succ c' ih =>
+    rw [addN_succ_right]
+    rw [mulN_succ_right]
+    rw [ih]
+    rw [mulN_succ_right]
+    rw [addN_assoc]
+
 
 
 /-
@@ -427,7 +484,23 @@ definition usually leads to a clearer proof.
 
 theorem mulN_addN_distrib_left_by_first_arg (a b c : Nat) :
     mulN a (addN b c) = addN (mulN a b) (mulN a c) := by
-  sorry
+  induction a with
+  | zero =>
+    rw [mulN_zero_left]
+    rw [mulN_zero_left]
+    rw [mulN_zero_left]
+    rfl
+  | succ a' ih =>
+    rw [mulN_succ_left]
+    rw [mulN_succ_left]
+    rw [mulN_succ_left]
+    rw [ih]
+    rw [addN_assoc]
+    rw [addN_assoc]
+    rw [addN_comm]
+
+
+
 
 
 /-
