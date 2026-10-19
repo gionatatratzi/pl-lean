@@ -469,8 +469,6 @@ theorem mulN_addN_distrib_left (a b c : Nat) : mulN a (addN b c) = addN (mulN a 
     rw [mulN_succ_right]
     rw [addN_assoc]
 
-
-
 /-
 #### Optional challenge: choose a less convenient induction variable
 
@@ -499,10 +497,6 @@ theorem mulN_addN_distrib_left_by_first_arg (a b c : Nat) :
     rw [addN_assoc]
     rw [addN_comm]
 
-
-
-
-
 /-
 ### Exercise: Associativity of mulN
 
@@ -514,7 +508,16 @@ Hint: in the inductive case, exploit `mulN_addN_distrib_left`.
 -/
 
 theorem mulN_assoc (n m k : Nat) : mulN (mulN n m) k = mulN n (mulN m k) := by
-  sorry
+  induction k with
+  | zero =>
+    rw [mulN_zero_right]
+    rw [mulN_zero_right]
+    rw [mulN_zero_right]
+  | succ k' ih =>
+    rw [mulN_succ_right]
+    rw [mulN_succ_right]
+    rw [mulN_addN_distrib_left]
+    rw [ih]
 
 
 /-
@@ -527,7 +530,9 @@ Prove that `eqN` is reflexive.  Hint: proceed by induction on `a`, and use the
 -/
 
 theorem eqN_refl (a : Nat) : eqN a a = true := by
-  sorry
+  induction a with
+  | zero => rfl
+  | succ a' ih => exact ih
 
 
 /-
@@ -546,7 +551,9 @@ def leN : Nat → Nat → Bool
 -/
 
 theorem leN_refl (n : Nat) : leN n n = true := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih => exact ih
 
 
 /-
@@ -563,7 +570,21 @@ In the `succ`, `succ` case, use the induction hypothesis.
 -/
 
 theorem leN_antisymm : ∀ n m, leN n m → leN m n → eqN n m := by
-  sorry
+  intro n
+  induction n with
+    | zero =>
+      intro m h1 h2
+      cases m with
+        | zero => rfl
+        | succ m' => cases h2
+    | succ n' ih =>
+      intro m h1 h2
+      cases m with
+      | zero => cases h1
+      | succ m' =>
+        apply ih
+          exact h1
+          exact h2
 
 
 /-
@@ -582,7 +603,9 @@ def subN : Nat → Nat → Nat
 -/
 
 theorem subN_self (n : Nat) : subN n n = 0 := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih => exact ih
 
 
 /-
@@ -595,7 +618,11 @@ Hint: `simp` knows that `!` is involutive.
 -/
 
 theorem isEven_succ (n: Nat) : isEven (n+1) = !(isEven n) := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih =>
+    simp [isEven] at ih ⊢
+    exact ih
 
 
 /-
@@ -607,7 +634,14 @@ Hint: by induction on `n`.
 -/
 
 theorem isEven_doubleN (n: Nat) : isEven (doubleN n) := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih =>
+    rw [doubleN]
+    rw [addN_succ_right]
+    rw [addN_succ_left]
+    simp [isEven]
+    exact ih
 
 
 /-
@@ -620,7 +654,13 @@ hypothesis, `addN_succ_right`, and `addN_succ_left`.
 -/
 
 theorem doubleN_addN (n: Nat) : doubleN n = addN n n := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih =>
+    rw [doubleN]
+    rw [addN_succ_right]
+    rw [addN_succ_left]
+    rw [ih]
 
 
 /-
@@ -642,7 +682,23 @@ After the case split, both sides compute to the same Boolean expression, so
 
 theorem evalBExp_dual (t : BExp) :
     evalBExp (dualBExp t) = !(evalBExp t) := by
-  sorry
+  induction t with
+  | btrue => rfl
+  | bfalse => rfl
+  | bifte t0 t1 t2 ih0 ih1 ih2 =>
+    rw [dualBExp]
+    rw [evalBExp]
+    rw [evalBExp]
+    rw [ih0]
+    cases h : evalBExp t0 with
+    | true =>
+      rw [ih1]
+      rw [h]
+      rfl
+    | false =>
+      rw [ih2]
+      rw [h]
+      rfl
 
 
 /-
@@ -682,15 +738,19 @@ inductive BExpConn where
 /-
 __Exercise (difficulty 1/4):__ Define the evaluation function for `BExpConn`.
 -/
-def evalBExpConn : BExpConn → Bool := sorry
+def evalBExpConn : BExpConn → Bool :=
+  | .btrue => true
+  | .bnot t => !(evalBExpConn t)
+  | .band t0 t1 => evalBExpConn t0 && evalBExpConn t1
+  | .bor t0 t1 => evalBExpConn t0 || evalBExpConn t1
 
 example :
     let ex0 := .band (.bor (.bnot .btrue) .btrue) .btrue
-    evalBExpConn ex0 = true := by sorry
+    evalBExpConn ex0 = true := by rfl
 
 example :
     let ex1 := .band (.bor (.bnot .btrue) .btrue) (.bnot .btrue)
-    evalBExpConn ex1 = false := by sorry
+    evalBExpConn ex1 = false := by rfl
 
 /-
 Every connective can be expressed with a conditional:
@@ -703,18 +763,22 @@ __Exercise (difficulty 2/4):__ Define a function `bexpconn_to_bexp` that transla
 `BExpConn` terms into `BExp` terms, following the intuition above.
 -/
 
-def bexpconn_to_bexp : BExpConn → BExp := sorry
+def bexpconn_to_bexp : BExpConn → BExp :=
+  | .btrue => .btrue
+  | .bnot t => .bifte (bexpconn_to_bexp t) .bfalse .btrue
+  | .band t0 t1 => .bifte (bexpconn_to_bexp t0) (bexpconn_to_bexp t1) .bfalse
+  | .bor t0 t1 => .bifte (bexpconn_to_bexp t0) .btrue (bexpconn_to_bexp t1)
 
 
 -- __Exercise (difficulty 1/4):__ Test the translation on the two examples above.
 
 example :
     let ex0 := .band (.bor (.bnot .btrue) .btrue) .btrue
-    evalBExpConn ex0 = evalBExp (bexpconn_to_bexp ex0) := by sorry
+    evalBExpConn ex0 = evalBExp (bexpconn_to_bexp ex0) := by rfl
 
 example :
     let ex1 := .band (.bor (.bnot .btrue) .btrue) (.bnot .btrue)
-    evalBExpConn ex1 = evalBExp (bexpconn_to_bexp ex1) := by sorry
+    evalBExpConn ex1 = evalBExp (bexpconn_to_bexp ex1) := by rfl
 
 /-
 __Exercise (difficulty 3/4):__ Prove that the translation preserves the meaning:
@@ -729,7 +793,32 @@ equation for `e`, allowing the surrounding conditional to compute.
 -/
 
 theorem bexpconn_equiv_bexp (t : BExpConn) : evalBExpConn t = evalBExp (bexpconn_to_bexp t) := by
-  sorry
+  induction t with
+  | btrue => rfl
+  | bnot t ih =>
+    rw [evalBExpConn]
+    rw [bexpconn_to_bexp]
+    rw [evalBExp]
+    rw [ih]
+    cases h : evalBExp (bexpconn_to_bexp t) with
+    | true => rfl
+    | false => rfl
+  | band t0 t1 ih0 ih1 =>
+    rw [evalBExpConn]
+    rw [bexpconn_to_bexp]
+    rw [evalBExp]
+    rw [ih0, ih1]
+    cases h : evalBExp (bexpconn_to_bexp t0) with
+    | true => rfl
+    | false => rfl
+  | bor t0 t1 ih0 ih1 =>
+    rw [evalBExpConn]
+    rw [bexpconn_to_bexp]
+    rw [evalBExp]
+    rw [ih0, ih1]
+    cases h : evalBExp (bexpconn_to_bexp t0) with
+    | true => rfl
+    | false => rfl
 
 end Exercises
 
@@ -784,9 +873,12 @@ inductive BinNat where
 Write a function `binToNat` that converts a `BinNat` into a `Nat`.
 -/
 
-def binToNat : BinNat → Nat := sorry
+def binToNat : BinNat → Nat :=
+  | .bz => 0
+  | .b0 n => 2 * binToNat n
+  | .b1 n => 2 * binToNat n + 1
 
-example : binToNat (.b0 (.b1 (.b1 .bz))) = 6 := by sorry
+example : binToNat (.b0 (.b1 (.b1 .bz))) = 6 := by rfl
 
 
 /-
@@ -800,9 +892,12 @@ Write a function `binIncr` that adds one *directly on numerals*, as in a binary 
 * a numeral ending in `1` becomes `0` and *carries* to the rest.
 -/
 
-def binIncr : BinNat → BinNat := sorry
+def binIncr : BinNat → BinNat :=
+  | .bz => .b1 .bz
+  | .b0 n => .b1 n
+  | .b1 n => .b0 (binIncr n)
 
-example : binToNat (binIncr (.b0 (.b1 (.b1 .bz)))) = 7 := by sorry
+example : binToNat (binIncr (.b0 (.b1 (.b1 .bz)))) = 7 := by rfl
 
 /-
 ### Task 3: Converting natural to binary
@@ -813,10 +908,12 @@ Write a function `natToBin` that converts a `Nat` into a `BinNat`
 by counting up from zero.
 -/
 
-def natToBin : Nat → BinNat := sorry
+def natToBin : Nat → BinNat :=
+  | 0 => .bz
+  | n + 1 => binIncr (natToBin n)
 
-example : natToBin 6 = (.b0 (.b1 (.b1 .bz))) := by sorry
-example : natToBin 11 = (.b1 (.b1 (.b0 (.b1 .bz)))) := by sorry
+example : natToBin 6 = (.b0 (.b1 (.b1 .bz))) := by rfl
+example : natToBin 11 = (.b1 (.b1 (.b0 (.b1 .bz)))) := by rfl
 
 
 /-
@@ -838,7 +935,7 @@ Prove that the diagram *commutes*, that is the two paths to b' are equivalent.
 -/
 
 theorem natToBin_succ (n : Nat) : natToBin (n + 1) = binIncr (natToBin n) := by
-  sorry
+  rfl
 
 
 /-
@@ -854,11 +951,14 @@ converting to `Nat`.  Zero must stay `bz` (we do not want a leading zero digit):
     binDouble (b1 n) = b0 (b1 n)
 -/
 
-def binDouble : BinNat → BinNat := sorry
+def binDouble : BinNat → BinNat :=
+  | .bz => .bz
+  | .b0 n => .b0 (.b0 n)
+  | .b1 n => .b0 (.b1 n)
 
-example : binDouble .bz = .bz := by sorry
-example : binDouble (.b1 .bz) = .b0 (.b1 .bz) := by sorry
-example : binToNat (binDouble (.b1 (.b1 .bz))) = 6 := by sorry
+example : binDouble .bz = .bz := by rfl
+example : binDouble (.b1 .bz) = .b0 (.b1 .bz) := by rfl
+example : binToNat (binDouble (.b1 (.b1 .bz))) = 6 := by rfl
 
 
 /-
@@ -872,8 +972,10 @@ Hint: no induction is needed.  There are three constructors, so use `cases`.
 
 theorem binToNat_binDouble (b : BinNat) :
     binToNat (binDouble b) = 2 * binToNat b := by
-  sorry
-
+  cases b with
+  | bz => rfl
+  | b0 n => rfl
+  | b1 n => rfl
 
 /-
 ### Task 7: Correctness of binary increment (2)
@@ -901,7 +1003,19 @@ does not replace the induction.
 
 theorem binToNat_binIncr (b : BinNat) :
     binToNat (binIncr b) = binToNat b + 1 := by
-  sorry
+  induction b with
+  | bz => rfl
+  | b0 n ih =>
+    rw [binIncr]
+    rw [binToNat]
+    rw [binToNat]
+    omega
+  | b1 n ih =>
+    rw [binIncr]
+    rw [binToNat]
+    rw [binToNat]
+    rw [ih]
+    omega
 
 
 /-
@@ -917,7 +1031,13 @@ Hint: induction on `n`.  The successor case needs `natToBin_succ`,
 -/
 
 theorem binToNat_natToBin (n : Nat) : binToNat (natToBin n) = n := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n ih =>
+    rw [natToBin_succ]
+    rw [binToNat_binIncr]
+    rw [ih]
+    omega
 
 
 end Binary_numbers
