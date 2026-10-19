@@ -600,7 +600,7 @@ definition.
 -/
 
 def tripleN (n : Nat) : Nat :=
-  sorry
+  addN (doubleN n) n
 
 example : tripleN 0 = 0  := by sorry
 example : tripleN 4 = 12 := by sorry
@@ -616,7 +616,9 @@ You may use Lean's built-in `+` here.
 -/
 
 def sumUpTo (n : Nat) : Nat :=
-  sorry
+  match n with
+  | 0     => 0
+  | n' + 1 => addN n' (sumUpTo n')
 
 example : sumUpTo 0 = 0   := by sorry
 example : sumUpTo 4 = 10  := by sorry
@@ -634,7 +636,10 @@ Lean accepts it because both calls are on smaller arguments.
 -/
 
 def fibN (n : Nat) : Nat :=
-  sorry
+  match n with
+  | 0     => 0
+  | 1     => 1
+  | n' + 2 => addN (fibN n') (fibN (n' + 1))
 
 example : fibN 0 = 0    := by sorry
 example : fibN 1 = 1    := by sorry
@@ -702,7 +707,7 @@ Hint: `n < m` holds exactly when `n + 1 ≤ m`.  Reuse `leN`.
 -/
 
 def ltN (n m : Nat) : Bool :=
-  sorry
+  leN (Nat.succ n) m
 
 example : ltN 2 3 = true  := by sorry
 example : ltN 3 3 = false := by sorry
@@ -781,7 +786,7 @@ inputs and returns the original number for odd inputs.
 -/
 
 def zeroIfEven (n : Nat) : Nat :=
-  sorry
+  if isEven n then 0 else n
 
 example : zeroIfEven 4 = 0 := by sorry
 example : zeroIfEven 5 = 5 := by sorry
@@ -792,7 +797,7 @@ and `leN`.
 -/
 
 def maxN (n m : Nat) : Nat :=
-  sorry
+  if leN n m then m else n
 
 example : maxN 3 8 = 8 := by sorry
 example : maxN 9 4 = 9 := by sorry
@@ -976,7 +981,7 @@ Then use it with `iterateN`: applying `addTen` three times to 10 must give 40.
 -/
 
 def addTen : Nat → Nat :=
-  sorry
+  addN 10
 
 example : addTen 5 = 15 := by sorry
 example : iterateN addTen 3 10 = 40 := by sorry
@@ -1040,7 +1045,7 @@ Then predict, and check with `#eval`, the value of `iterateN (makePower 2) 3 2`.
 -/
 
 def makePower (e : Nat) : Nat → Nat :=
-  sorry
+  fun b => powN b e
 
 example : makePower 2 5 = 25 := by sorry
 example : makePower 3 2 = 8  := by sorry
@@ -1142,7 +1147,9 @@ Use `if` in the recursive case.
 -/
 
 def anyBelow (p : Nat → Bool) (n : Nat) : Bool :=
-  sorry
+  match n with
+  | 0      => false
+  | n' + 1 => if p n' then true else anyBelow p n'
 
 example : anyBelow (fun i => eqN i 3) 5 = true := by sorry
 example : anyBelow (fun i => eqN i 7) 5 = false := by sorry
@@ -1154,7 +1161,7 @@ of the numbers below `n`, by reusing `sumBelow` with an anonymous function.
 -/
 
 def sumOfSquares (n : Nat) : Nat :=
-  sorry
+  sumBelow (fun i => mulN i i) n
 
 example : sumOfSquares 0 = 0 := by sorry
 example : sumOfSquares 4 = 14 := by sorry
@@ -1321,7 +1328,9 @@ __Exercise__: prove in the same way that `isZero n = eqN n 0`.
 -/
 
 theorem isZero_eq_eqN (n : Nat) : isZero n = eqN n 0 := by
-  sorry
+  cases n with
+  | zero   => rfl
+  | succ _ => rfl
 
 end Proofs_by_rewriting
 
@@ -1440,7 +1449,9 @@ the induction hypothesis `ih`.  You can use them with `rw [...]` or inside
 -/
 
 theorem zero_mulN (n : Nat) : mulN 0 n = 0 := by
-  sorry
+  induction n with
+  | zero => rfl
+  | succ n' ih => rw [mulN_succ, addN_zero, ih]
 
 end Induction
 
@@ -1522,7 +1533,7 @@ Use `iterateN` and partial application (or an anonymous function).
 -/
 
 def repeatAdd (k a : Nat) : Nat → Nat :=
-  sorry
+  iterateN (addN a) k
 
 example : repeatAdd 3 5 10 = 25 := by sorry
 example : repeatAdd 0 5 10 = 10 := by sorry
@@ -1535,7 +1546,7 @@ from 1.  Do not use `powN`.
 -/
 
 def powerOfTwo (k : Nat) : Nat :=
-  sorry
+  iterateN doubleN k 1
 
 example : powerOfTwo 0 = 1  := by sorry
 example : powerOfTwo 6 = 64 := by sorry
@@ -1555,10 +1566,10 @@ A number is prime when it has exactly two divisors: 1 and itself.
 -/
 
 def countDivisors (n : Nat) : Nat :=
-  sorry
+  countBelow (fun d => n % (d + 1) == 0) n
 
 def isPrimeN (n : Nat) : Bool :=
-  sorry
+  countDivisors n == 2
 
 -- #eval countDivisors 6      -- expected: 4  (1, 2, 3, 6)
 -- #eval countDivisors 7      -- expected: 2
@@ -1581,7 +1592,9 @@ or by an explicit `rw`.
 -/
 
 theorem addN_eq_addN₂ (n m : Nat) : addN n m = addN₂ n m := by
-  sorry
+  induction m with
+  | zero => rfl
+  | succ m' ih => simp [addN, addN₂, ih]
 
 /-
 ### Exercise 5: iterating the identity
@@ -1594,7 +1607,9 @@ def identityN (n : Nat) : Nat :=
   n
 
 theorem iterate_identity (k n : Nat) : iterateN identityN k n = n := by
-  sorry
+  induction k with
+  | zero => rfl
+  | succ k' ih => simp [iterateN, identityN, ih]
 
 /-
 ### Exercise 6: composition is associative
@@ -1606,7 +1621,7 @@ after unfolding `composeN`.  No induction is needed.
 
 theorem composeN_assoc (f g h : Nat → Nat) :
     composeN (composeN f g) h = composeN f (composeN g h) := by
-  sorry
+  rfl
 
 /-
 ### Exercise 7 (challenge): associativity of addition
